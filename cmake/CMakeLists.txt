@@ -257,6 +257,8 @@ option(onnxruntime_USE_OPENVINO_INTERFACE "Build ONNXRuntime shared lib which is
 option(onnxruntime_USE_VITISAI_INTERFACE "Build ONNXRuntime shared lib which is compatible with Vitis-AI EP interface" OFF)
 option(onnxruntime_USE_QNN_INTERFACE "Build ONNXRuntime shared lib which is compatible with QNN EP interface" OFF)
 
+option(onnxruntime_ADD_CSHARP_PREDEFINES "Add predefines for C# build" OFF)
+
 # ENABLE_TRAINING includes all training functionality
 # The following 2 entry points
 # 1. ORTModule
@@ -1818,6 +1820,11 @@ if (onnxruntime_BUILD_CSHARP)
   message(STATUS "CSharp Build is enabled")
 #  set_property(GLOBAL PROPERTY VS_DOTNET_TARGET_FRAMEWORK_VERSION "netstandard2.0")
   list(APPEND ONNXRUNTIME_CMAKE_FILES onnxruntime_csharp)
+endif()
+
+if (onnxruntime_ADD_CSHARP_PREDEFINES)
+  message(STATUS "Generating CSharp preprocessor defines")
+  list(APPEND ONNXRUNTIME_CMAKE_FILES onnxruntime_csharp_predefines)
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Emscripten")

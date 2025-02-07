@@ -1028,6 +1028,7 @@ def generate_build_tree(
         "-Donnxruntime_USE_MIMALLOC=" + ("ON" if args.use_mimalloc else "OFF"),
         "-Donnxruntime_ENABLE_PYTHON=" + ("ON" if args.enable_pybind else "OFF"),
         "-Donnxruntime_BUILD_CSHARP=" + ("ON" if args.build_csharp else "OFF"),
+        "-Donnxruntime_ADD_CSHARP_PREDEFINES=" + ("ON" if args.build_csharp or args.android else "OFF"),
         "-Donnxruntime_BUILD_JAVA=" + ("ON" if args.build_java else "OFF"),
         "-Donnxruntime_BUILD_NODEJS=" + ("ON" if args.build_nodejs else "OFF"),
         "-Donnxruntime_BUILD_OBJC=" + ("ON" if args.build_objc else "OFF"),
