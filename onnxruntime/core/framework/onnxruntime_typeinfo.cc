@@ -12,7 +12,6 @@
 #include "core/session/ort_apis.h"
 #include "core/session/model_builder_api.h"
 #include "core/framework/error_code_helper.h"
-
 #include "core/framework/tensor_type_and_shape.h"
 #include "core/framework/onnxruntime_map_type_info.h"
 #include "core/framework/onnxruntime_sequence_type_info.h"
@@ -96,7 +95,7 @@ ORT_API_STATUS_IMPL(OrtApis::GetDenotationFromTypeInfo, _In_ const OrtTypeInfo* 
   API_IMPL_END
 }
 
-ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateTensorTypeInfo, _In_ const OrtTensorTypeAndShapeInfo* tensor_info,
+ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateTensorTypeInfo, _In_ const OrtTensorTypeAndShapeInfo* tensor_info,
                     _Out_ OrtTypeInfo** type_info) {
   API_IMPL_BEGIN
   auto ti = std::make_unique<OrtTypeInfo>(ONNXType::ONNX_TYPE_TENSOR);
@@ -106,7 +105,7 @@ ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateTensorTypeInfo, _In_ const OrtTens
   API_IMPL_END
 }
 
-ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateSparseTensorTypeInfo, _In_ const OrtTensorTypeAndShapeInfo* tensor_info,
+ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateSparseTensorTypeInfo, _In_ const OrtTensorTypeAndShapeInfo* tensor_info,
                     _Out_ OrtTypeInfo** type_info) {
   API_IMPL_BEGIN
   auto ti = std::make_unique<OrtTypeInfo>(ONNXType::ONNX_TYPE_SPARSETENSOR);
@@ -116,7 +115,7 @@ ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateSparseTensorTypeInfo, _In_ const O
   API_IMPL_END
 }
 
-ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateMapTypeInfo, ONNXTensorElementDataType map_key_type,
+ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateMapTypeInfo, ONNXTensorElementDataType map_key_type,
                     _In_ const OrtTypeInfo* map_value_type, _Out_ OrtTypeInfo** type_info) {
   API_IMPL_BEGIN
   auto ti = std::make_unique<OrtTypeInfo>(ONNXType::ONNX_TYPE_MAP);
@@ -127,7 +126,7 @@ ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateMapTypeInfo, ONNXTensorElementData
   API_IMPL_END
 }
 
-ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateSequenceTypeInfo, _In_ const OrtTypeInfo* sequence_type,
+ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateSequenceTypeInfo, _In_ const OrtTypeInfo* sequence_type,
                     _Out_ OrtTypeInfo** type_info) {
   API_IMPL_BEGIN
   auto ti = std::make_unique<OrtTypeInfo>(ONNXType::ONNX_TYPE_SEQUENCE);
@@ -138,7 +137,7 @@ ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateSequenceTypeInfo, _In_ const OrtTy
   API_IMPL_END
 }
 
-ORT_API_STATUS_IMPL(OrtModelBuilderApi::CreateOptionalTypeInfo, _In_ const OrtTypeInfo* contained_type,
+ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateOptionalTypeInfo, _In_ const OrtTypeInfo* contained_type,
                     _Out_ OrtTypeInfo** type_info) {
   API_IMPL_BEGIN
   auto ti = std::make_unique<OrtTypeInfo>(ONNXType::ONNX_TYPE_OPTIONAL);

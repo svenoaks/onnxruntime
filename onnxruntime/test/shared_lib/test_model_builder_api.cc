@@ -159,7 +159,7 @@ TEST(ModelBuilderAPITest, Basic_CApi) {
     Ort::ThrowOnError(api.SetDimensions(tensor_type_info, input_dims.data(), input_dims.size()));
 
     OrtTypeInfo* input_type_info = nullptr;
-    Ort::ThrowOnError(api.CreateTensorTypeInfo(tensor_type_info, &input_type_info));
+    Ort::ThrowOnError(model_builder_api.CreateTensorTypeInfo(tensor_type_info, &input_type_info));
     api.ReleaseTensorTypeAndShapeInfo(tensor_type_info);  // input_type_info took a copy
 
     // create ValueInfo and release the type info as CreateValueInfo takes a copy.
@@ -176,7 +176,7 @@ TEST(ModelBuilderAPITest, Basic_CApi) {
     Ort::ThrowOnError(api.SetTensorElementType(tensor_type_info, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT));
     Ort::ThrowOnError(api.SetDimensions(tensor_type_info, output_dims.data(), output_dims.size()));
 
-    Ort::ThrowOnError(api.CreateTensorTypeInfo(tensor_type_info, &output_type_info));
+    Ort::ThrowOnError(model_builder_api.CreateTensorTypeInfo(tensor_type_info, &output_type_info));
     api.ReleaseTensorTypeAndShapeInfo(tensor_type_info);  // input_type_info took a copy
 
     OrtValueInfo* output_value_info = nullptr;
@@ -622,11 +622,13 @@ TEST(ModelBuilderAPITest, InvalidModelEdit) {
 
 TEST(ModelBuilderAPITest, CreateTypeInfo) {
   const auto& api = Ort::GetApi();
+  const auto& model_builder_api = Ort::GetModelBuilderApi();
+
   TensorTypeAndShapeInfo base_tensor_info(ONNXTensorElementDataType::ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT,
                                           {2, 4});
 
   OrtTypeInfo* base_tensor_type_info = nullptr;
-  Ort::ThrowOnError(api.CreateTensorTypeInfo(base_tensor_info, &base_tensor_type_info));
+  Ort::ThrowOnError(model_builder_api.CreateTensorTypeInfo(base_tensor_info, &base_tensor_type_info));
 
   ONNXType onnx_type = ONNX_TYPE_UNKNOWN;
   OrtTypeInfo* sparse_tensor_type_info = nullptr;
@@ -634,7 +636,7 @@ TEST(ModelBuilderAPITest, CreateTypeInfo) {
   ONNXTensorElementDataType onnx_element_type = ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
 
   // sparse tensor
-  Ort::ThrowOnError(api.CreateSparseTensorTypeInfo(base_tensor_info, &sparse_tensor_type_info));
+  Ort::ThrowOnError(model_builder_api.CreateSparseTensorTypeInfo(base_tensor_info, &sparse_tensor_type_info));
   Ort::ThrowOnError(api.GetOnnxTypeFromTypeInfo(sparse_tensor_type_info, &onnx_type));
   ASSERT_EQ(onnx_type, ONNXType::ONNX_TYPE_SPARSETENSOR);
   Ort::ThrowOnError(api.CastTypeInfoToTensorInfo(sparse_tensor_type_info, &tensor_info));
@@ -646,7 +648,7 @@ TEST(ModelBuilderAPITest, CreateTypeInfo) {
   const OrtSequenceTypeInfo* sequence_info = nullptr;
   OrtTypeInfo* sequence_element_type_info = nullptr;
 
-  Ort::ThrowOnError(api.CreateSequenceTypeInfo(base_tensor_type_info, &sequence_type_info));
+  Ort::ThrowOnError(model_builder_api.CreateSequenceTypeInfo(base_tensor_type_info, &sequence_type_info));
   Ort::ThrowOnError(api.GetOnnxTypeFromTypeInfo(sequence_type_info, &onnx_type));
   ASSERT_EQ(onnx_type, ONNXType::ONNX_TYPE_SEQUENCE);
   Ort::ThrowOnError(api.CastTypeInfoToSequenceTypeInfo(sequence_type_info, &sequence_info));
@@ -662,8 +664,8 @@ TEST(ModelBuilderAPITest, CreateTypeInfo) {
   const OrtMapTypeInfo* map_info = nullptr;
   ONNXTensorElementDataType map_key_type = ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
   OrtTypeInfo* map_value_type_info = nullptr;
-  Ort::ThrowOnError(api.CreateMapTypeInfo(ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, base_tensor_type_info,
-                                          &map_type_info));
+  Ort::ThrowOnError(model_builder_api.CreateMapTypeInfo(ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, base_tensor_type_info,
+                                                        &map_type_info));
   Ort::ThrowOnError(api.GetOnnxTypeFromTypeInfo(map_type_info, &onnx_type));
   ASSERT_EQ(onnx_type, ONNXType::ONNX_TYPE_MAP);
   Ort::ThrowOnError(api.CastTypeInfoToMapTypeInfo(map_type_info, &map_info));
@@ -680,7 +682,7 @@ TEST(ModelBuilderAPITest, CreateTypeInfo) {
   OrtTypeInfo* optional_type_info = nullptr;
   const OrtOptionalTypeInfo* optional_info = nullptr;
   OrtTypeInfo* optional_contained_type_info = nullptr;
-  Ort::ThrowOnError(api.CreateOptionalTypeInfo(base_tensor_type_info, &optional_type_info));
+  Ort::ThrowOnError(model_builder_api.CreateOptionalTypeInfo(base_tensor_type_info, &optional_type_info));
   Ort::ThrowOnError(api.GetOnnxTypeFromTypeInfo(optional_type_info, &onnx_type));
   ASSERT_EQ(onnx_type, ONNXType::ONNX_TYPE_OPTIONAL);
   Ort::ThrowOnError(api.CastTypeInfoToOptionalTypeInfo(optional_type_info, &optional_info));

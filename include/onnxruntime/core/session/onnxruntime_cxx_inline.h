@@ -1107,7 +1107,7 @@ inline TypeInfo ConstSessionImpl<T>::GetOverridableInitializerTypeInfo(size_t in
 template <typename T>
 inline int ConstSessionImpl<T>::GetOpset(const std::string& domain) const {
   int opset;
-  ThrowOnError(GetApi().SessionGetOpsetForDomain(this->p_, domain.c_str(), &opset));
+  ThrowOnError(GetModelBuilderApi().SessionGetOpsetForDomain(this->p_, domain.c_str(), &opset));
   return opset;
 }
 
