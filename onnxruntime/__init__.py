@@ -211,11 +211,11 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
             if dist.metadata['Name'].startswith('onnxruntime'):
                 print(f"\t{dist.metadata['Name']}=={dist.version}")
 
-            print("Environment variables:")
-            if is_windows:
-                print(f"\tPATH={os.environ['PATH']}")
-            else:
-                print(f"\tLD_LIBRARY_PATH={os.environ['LD_LIBRARY_PATH']}")
+        print("Environment variables:")
+        if is_windows:
+            print(f"\tPATH={os.environ['PATH']}")
+        else:
+            print(f"\tLD_LIBRARY_PATH={os.environ['LD_LIBRARY_PATH']}")
 
     if not (cuda_version and cuda_version.startswith("12.")) and (cuda or cudnn):
         print(f"\033[33mWARNING: {package_name} is not built with CUDA 12.x support. "
