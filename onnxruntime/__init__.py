@@ -84,7 +84,66 @@ if version:
 onnxruntime_validation.check_distro_info()
 
 
-def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, torch_safe:bool = True, verbose: bool = False):
+def _get_package_root(package_name, directory_name=None):
+    root_directory_name = directory_name or package_name
+    import importlib.metadata
+    try:
+        dist = importlib.metadata.distribution(package_name)
+        files = dist.files or []
+
+        # Find the first file that matches the package name and ends with '__init__.py'
+        for file in files:
+            if file.name.endswith('__init__.py') and root_directory_name in file.parts:
+                return file.locate().parent
+        else:
+            print(f"Could not determine the installation path for package '{package_name}'.")
+    except importlib.metadata.PackageNotFoundError:
+        print(f"Package '{package_name}' not found.")
+
+    return None
+
+def _get_nvidia_dll_paths(is_windows:bool, cuda: bool = True, cudnn: bool = True):
+    if is_windows:
+        # Path is relative to site-packages directory.
+        cuda_dll_paths = [
+            ("nvidia", "cublas", "bin", "cublasLt64_12.dll"),
+            ("nvidia", "cublas", "bin", "cublas64_12.dll"),
+            ("nvidia", "cufft", "bin", "cufft64_11.dll"),
+            ("nvidia", "cuda_runtime", "bin", "cudart64_12.dll"),
+        ]
+        cudnn_dll_paths = [
+            ("nvidia", "cudnn", "bin", "cudnn_engines_runtime_compiled64_9.dll"),
+            ("nvidia", "cudnn", "bin", "cudnn_engines_precompiled64_9.dll"),
+            ("nvidia", "cudnn", "bin", "cudnn_heuristic64_9.dll"),
+            ("nvidia", "cudnn", "bin", "cudnn_ops64_9.dll"),
+            #("nvidia", "cudnn", "bin", "cudnn_adv64_9.dll"),
+            ("nvidia", "cudnn", "bin", "cudnn_graph64_9.dll"),
+            ("nvidia", "cudnn", "bin", "cudnn64_9.dll"),
+        ]
+    else:  # Linux
+        # cublas64 depends on cublasLt64, so cublasLt64 should be loaded first.
+        cuda_dll_paths = [
+            ("nvidia", "cublas", "lib", "libcublasLt.so.12"),
+            ("nvidia", "cublas", "lib", "libcublas.so.12"),
+            ("nvidia", "cuda_nvrtc", "lib", "libnvrtc.so.12"),
+            ("nvidia", "curand", "lib", "libcurand.so.10"),
+            ("nvidia", "cufft", "lib", "libcufft.so.11"),
+            ("nvidia", "cuda_runtime", "lib", "libcudart.so.12"),
+        ]
+        cudnn_dll_paths = [
+            ("nvidia", "cudnn", "lib", "libcudnn_engines_runtime_compiled.so.9"),
+            ("nvidia", "cudnn", "lib", "libcudnn_engines_precompiled.so.9"),
+            ("nvidia", "cudnn", "lib", "libcudnn_heuristic.so.9"),
+            ("nvidia", "cudnn", "lib", "libcudnn_ops.so.9"),
+            # ("nvidia", "cudnn", "bin", "libcudnn_adv.so.9"),
+            ("nvidia", "cudnn", "lib", "libcudnn_graph.so.9"),
+            ("nvidia", "cudnn", "lib", "libcudnn.so.9"),
+        ]
+
+    # Try load DLLs from site packages.
+    return (cuda_dll_paths if cuda else []) + (cudnn_dll_paths if cudnn else [])
+
+def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, directory=None, verbose: bool = False):
     """Preload CUDA 12.x and cuDNN 9.x DLLs in Windows or Linux, and MSVC runtime DLLs in Windows.
 
        When you installed PyTorch that is compatible with CUDA 12.x, set `torch_safe` to True is recommended.
@@ -94,7 +153,8 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, torch
         cuda (bool, optional): enable loading CUDA DLLs. Defaults to True.
         cudnn (bool, optional): enable loading cuDNN DLLs. Defaults to True.
         msvc (bool, optional): enable loading MSVC DLLs in Windows. Defaults to True.
-        torch_safe (bool, optional): enable loading CUDA and cuDNN DLLs from PyTorch in Windows. Defaults to True.
+        directory(str, optional): a directory contains CUDA or cuDNN DLL. It can be an absolute path,
+           or a path relative to directory of this file. Example relative path like `..\\torch\\lib`.
         verbose (bool, optional): allow printing more information to console for debugging purpose. Defaults to False.
     """
     import ctypes
@@ -151,85 +211,49 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, torch
 
     if cuda_version and cuda_version.startswith("12.") and (cuda or cudnn):
         torch_version = get_package_version("torch")
-        if torch_safe and torch_version and "+cu12" not in torch_version:
-            print(f"\033[33mWARNING: the installed PyTorch {torch_version} does not support CUDA 12.x. "
-                  f"Please install PyTorch for CUDA 12.x to be compatible with {package_name}.\033[0m")
+        is_torch_for_cuda_12 = torch_version and "+cu12" in torch_version
+        is_cuda_cudnn_imported_by_torch = False
+        if 'torch' in sys.modules:
+            is_cuda_cudnn_imported_by_torch = is_torch_for_cuda_12
+            if not is_torch_for_cuda_12:
+                print(f"\033[33mWARNING: the installed PyTorch {torch_version} does not support CUDA 12.x. "
+                    f"Please install PyTorch for CUDA 12.x to be compatible with {package_name}.\033[0m")
 
-        if is_windows:
-            if 'torch' in sys.modules and not torch_safe and torch_version and "+cu" in torch_version and (cuda or cudnn):
-                print("\033[33mWARNING: onnxruntime.preload_dlls is called with torch_safe=False when torch has been imported.")
-                print("Either set torch_safe=False, or not call preload_dlls in this case.\033[0m")
+        base_directory = directory or ".."
+        if not os.path.isabs(base_directory):
+            base_directory = os.path.join(os.path.dirname(__file__), base_directory)
+        base_directory = os.path.normpath(base_directory)
+        if not os.path.isdir(base_directory):
+            raise RuntimeError(f"Invalid paramter of directory={directory}. The directory does not exist!")
 
-            # In torch_safe mode, we will load same cuda and cudnn DLLs that used by PyTorch.
-            if torch_safe and torch_version and "+cu12" in torch_version:
-                # All paths are relative to the site-packages directory.
-                cuda_dll_paths = [
-                    ("torch", "lib", "cublasLt64_12.dll"),
-                    ("torch", "lib", "cublas64_12.dll"),
-                    ("torch", "lib", "cufft64_11.dll"),
-                    ("torch", "lib", "cudart64_12.dll"),
-                ]
-                # Some cudnn DLLs are loaded dynamically. It is better to add all DLLs used by ORT to this list.
-                # See https://docs.nvidia.com/deeplearning/cudnn/backend/v9.7.1/api/overview.html
-                cudnn_dll_paths = [
-                    ("torch", "lib", "cudnn_graph64_9.dll"),
-                    ("torch", "lib", "cudnn64_9.dll"),
-                ]
-            else:
-                cuda_dll_paths = [
-                    ("nvidia", "cublas", "bin", "cublasLt64_12.dll"),
-                    ("nvidia", "cublas", "bin", "cublas64_12.dll"),
-                    ("nvidia", "cufft", "bin", "cufft64_11.dll"),
-                    ("nvidia", "cuda_runtime", "bin", "cudart64_12.dll"),
-                ]
-                cudnn_dll_paths = [
-                    ("nvidia", "cudnn", "bin", "cudnn_graph64_9.dll"),
-                    ("nvidia", "cudnn", "bin", "cudnn64_9.dll"),
-                ]
-        else:  # Linux
-            # cublas64 depends on cublasLt64, so cublasLt64 should be loaded first.
-            cuda_dll_paths = [
-                ("nvidia", "cublas", "lib", "libcublasLt.so.12"),
-                ("nvidia", "cublas", "lib", "libcublas.so.12"),
-                ("nvidia", "cuda_nvrtc", "lib", "libnvrtc.so.12"),
-                ("nvidia", "curand", "lib", "libcurand.so.10"),
-                ("nvidia", "cufft", "lib", "libcufft.so.11"),
-                ("nvidia", "cuda_runtime", "lib", "libcudart.so.12"),
-            ]
-            cudnn_dll_paths = [
-                ("nvidia", "cudnn", "lib", "libcudnn_graph.so.9"),
-                ("nvidia", "cudnn", "lib", "libcudnn.so.9"),
-            ]
+        if is_cuda_cudnn_imported_by_torch:
+            if verbose:
+                print("Skip loading CUDA and cuDNN DLLs since torch is imported.")
+        else:
+            dll_paths = _get_nvidia_dll_paths(is_windows, cuda, cudnn)
+            loaded_dlls = []
+            for relative_path in dll_paths:
+                dll_path = os.path.join(base_directory, relative_path[-1]) if directory else os.path.join(base_directory, *relative_path)
+                if os.path.isfile(dll_path):
+                    try:
+                        _ = ctypes.CDLL(dll_path)
+                        loaded_dlls.append(relative_path[-1])
+                    except Exception as e:
+                        print(f"Failed to load {dll_path}: {e}")
 
-        # Try load DLLs from site packages.
-        site_packages_path = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-        dll_paths = (cuda_dll_paths if cuda else []) + (cudnn_dll_paths if cudnn else [])
-        loaded_dlls = []
-        for relative_path in dll_paths:
-            dll_path = os.path.join(site_packages_path, *relative_path)
-            if os.path.isfile(dll_path):
-                try:
-                    _ = ctypes.CDLL(dll_path)
-                    loaded_dlls.append(relative_path[-1])
-                    # Add DLL directory to search path for cuDNN.
-                    if relative_path[-1] in ["cudnn64_9.dll"]:
-                        os.add_dll_directory(os.path.dirname(dll_path))
-                except Exception as e:
-                    print(f"Failed to load {dll_path}: {e}")
+            # Try load DLLs with default path settings.
+            has_failure = False
+            for relative_path in dll_paths:
+                dll_filename = relative_path[-1]
+                if dll_filename not in loaded_dlls:
+                    try:
+                        _ = ctypes.CDLL(dll_filename)
+                    except Exception as e:
+                        has_failure = True
+                        print(f"Failed to load {dll_filename}: {e}")
 
-        # Try load DLLs with default path settings.
-        has_failure = False
-        for relative_path in dll_paths:
-            dll_filename = relative_path[-1]
-            if dll_filename not in loaded_dlls:
-                try:
-                    _ = ctypes.CDLL(dll_filename)
-                except Exception as e:
-                    has_failure = True
-                    print(f"Failed to load {dll_filename}: {e}")
-
-        if has_failure:
-            print("Please follow https://onnxruntime.ai/docs/install/#cuda-and-cudnn to install CUDA and CuDNN.")
+            if has_failure:
+                print("Please follow https://onnxruntime.ai/docs/install/#cuda-and-cudnn to install CUDA and CuDNN.")
 
     if verbose:
 
