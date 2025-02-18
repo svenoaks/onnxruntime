@@ -226,7 +226,7 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
             if torch_root:
                 directory = os.path.join(torch_root, "lib")
 
-        base_directory = directory or ".."
+        base_directory = directory or _get_package_root("nvidia-cuda-runtime-cu12" if cuda else "nvidia-cudnn-cu12", "nvidia") or ".."
         if not os.path.isabs(base_directory):
             base_directory = os.path.join(os.path.dirname(__file__), base_directory)
         base_directory = os.path.normpath(base_directory)
