@@ -116,7 +116,7 @@ def _get_nvidia_dll_paths(is_windows:bool, cuda: bool = True, cudnn: bool = True
             ("nvidia", "cudnn", "bin", "cudnn_engines_precompiled64_9.dll"),
             ("nvidia", "cudnn", "bin", "cudnn_heuristic64_9.dll"),
             ("nvidia", "cudnn", "bin", "cudnn_ops64_9.dll"),
-            #("nvidia", "cudnn", "bin", "cudnn_adv64_9.dll"),
+            ("nvidia", "cudnn", "bin", "cudnn_adv64_9.dll"),
             ("nvidia", "cudnn", "bin", "cudnn_graph64_9.dll"),
             ("nvidia", "cudnn", "bin", "cudnn64_9.dll"),
         ]
@@ -135,7 +135,7 @@ def _get_nvidia_dll_paths(is_windows:bool, cuda: bool = True, cudnn: bool = True
             ("nvidia", "cudnn", "lib", "libcudnn_engines_precompiled.so.9"),
             ("nvidia", "cudnn", "lib", "libcudnn_heuristic.so.9"),
             ("nvidia", "cudnn", "lib", "libcudnn_ops.so.9"),
-            # ("nvidia", "cudnn", "bin", "libcudnn_adv.so.9"),
+            ("nvidia", "cudnn", "bin", "libcudnn_adv.so.9"),
             ("nvidia", "cudnn", "lib", "libcudnn_graph.so.9"),
             ("nvidia", "cudnn", "lib", "libcudnn.so.9"),
         ]
@@ -153,8 +153,9 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
         cuda (bool, optional): enable loading CUDA DLLs. Defaults to True.
         cudnn (bool, optional): enable loading cuDNN DLLs. Defaults to True.
         msvc (bool, optional): enable loading MSVC DLLs in Windows. Defaults to True.
-        directory(str, optional): a directory contains CUDA or cuDNN DLL. It can be an absolute path,
-           or a path relative to directory of this file. Example relative path like `..\\torch\\lib`.
+        directory(str, optional): a directory contains CUDA or cuDNN DLLs. It can be an absolute path,
+           or a path relative to the directory of this file. If its value is None, we will try load from lib directory
+           of PyTorch in Windows or nvidia site packages.
         verbose (bool, optional): allow printing more information to console for debugging purpose. Defaults to False.
     """
     import ctypes
@@ -219,6 +220,11 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
                 print(f"\033[33mWARNING: the installed PyTorch {torch_version} does not support CUDA 12.x. "
                     f"Please install PyTorch for CUDA 12.x to be compatible with {package_name}.\033[0m")
 
+        if is_windows and is_torch_for_cuda_12 and not directory:
+            torch_root = _get_package_root("torch")
+            if torch_root:
+                directory = os.path.join(torch_root, "lib")
+
         base_directory = directory or ".."
         if not os.path.isabs(base_directory):
             base_directory = os.path.join(os.path.dirname(__file__), base_directory)
@@ -232,6 +238,44 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
         else:
             dll_paths = _get_nvidia_dll_paths(is_windows, cuda, cudnn)
             loaded_dlls = []
+            # if is_windows:
+            #     kernel32 = ctypes.WinDLL("kernel32.dll", use_last_error=True)
+            #     with_load_library_flags = hasattr(kernel32, "AddDllDirectory")
+            #     prev_error_mode = kernel32.SetErrorMode(0x0001)
+
+            #     kernel32.LoadLibraryW.restype = ctypes.c_void_p
+            #     if with_load_library_flags:
+            #         kernel32.LoadLibraryExW.restype = ctypes.c_void_p
+
+            #     path_patched = False
+            #     for relative_path in dll_paths:
+            #         dll_path = os.path.join(base_directory, relative_path[-1]) if directory else os.path.join(base_directory, *relative_path)
+            #         is_loaded = False
+            #         if with_load_library_flags:
+            #             res = kernel32.LoadLibraryExW(dll_path, None, 0x00001100)
+            #             last_error = ctypes.get_last_error()
+            #             if res is None and last_error != 126:
+            #                 err = ctypes.WinError(last_error)
+            #                 err.strerror += (
+            #                     f' Error loading "{dll_path}" or one of its dependencies.'
+            #                 )
+            #                 raise err
+            #             elif res is not None:
+            #                 is_loaded = True
+
+            #         if not is_loaded:
+            #             if not path_patched:
+            #                 os.environ["PATH"] = ";".join(dll_paths + [os.environ["PATH"]])
+            #                 path_patched = True
+            #             res = kernel32.LoadLibraryW(dll_path)
+            #             if res is None:
+            #                 err = ctypes.WinError(ctypes.get_last_error())
+            #                 err.strerror += (
+            #                     f' Error loading "{dll_path}" or one of its dependencies.'
+            #                 )
+            #                 raise err
+
+            #     kernel32.SetErrorMode(prev_error_mode)
             for relative_path in dll_paths:
                 dll_path = os.path.join(base_directory, relative_path[-1]) if directory else os.path.join(base_directory, *relative_path)
                 if os.path.isfile(dll_path):
