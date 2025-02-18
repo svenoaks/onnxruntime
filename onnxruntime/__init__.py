@@ -84,16 +84,18 @@ if version:
 onnxruntime_validation.check_distro_info()
 
 
-def _get_package_version(package_name:str):
-    from importlib.metadata import version, PackageNotFoundError
+def _get_package_version(package_name: str):
+    from importlib.metadata import PackageNotFoundError, version
+
     try:
         package_version = version(package_name)
     except PackageNotFoundError:
         package_version = None
     return package_version
 
+
 def _get_package_root(package_name, directory_name=None):
-    from importlib.metadata import distribution, PackageNotFoundError
+    from importlib.metadata import PackageNotFoundError, distribution
 
     root_directory_name = directory_name or package_name
     try:
@@ -102,15 +104,22 @@ def _get_package_root(package_name, directory_name=None):
 
         # Find the first file that matches the package name and ends with '__init__.py'
         for file in files:
-            if file.name.endswith('__init__.py') and root_directory_name in file.parts:
+            if file.name.endswith("__init__.py") and root_directory_name in file.parts:
                 return file.locate().parent
+
+        # Fallback to the first __init__.py
+        if not directory_name:
+            for file in files:
+                if file.name.endswith("__init__.py"):
+                    return file.locate().parent
     except PackageNotFoundError:
         # package not found, do nothing
         pass
 
     return None
 
-def _get_nvidia_dll_paths(is_windows:bool, cuda: bool = True, cudnn: bool = True):
+
+def _get_nvidia_dll_paths(is_windows: bool, cuda: bool = True, cudnn: bool = True):
     if is_windows:
         # Path is relative to site-packages directory.
         cuda_dll_paths = [
@@ -147,59 +156,77 @@ def _get_nvidia_dll_paths(is_windows:bool, cuda: bool = True, cudnn: bool = True
     # Try load DLLs from site packages.
     return (cuda_dll_paths if cuda else []) + (cudnn_dll_paths if cudnn else [])
 
+
 def print_debug_info():
-    """Prints debug information to the console.
-    """
-    import platform
+    """Print information to help debugging."""
+    import importlib.util
     import os
+    import platform
     from importlib.metadata import distributions
 
-    print("platform:", platform.platform())
     print(f"{package_name} version: {__version__}")
     if cuda_version:
         print(f"CUDA version used in build: {cuda_version}")
+    print("platform:", platform.platform())
 
-    # List onnxruntime* packages to help identify that multiple onnxruntime packages were installed.
-    print("onnxruntime* packages and installed version:")
+    print("\nPython package, version and location:")
     for dist in distributions():
-        if dist.metadata['Name'].startswith('onnxruntime'):
-            print(f"\t{dist.metadata['Name']}=={dist.version}")
+        package = dist.metadata["Name"]
+        if package == "onnxruntime" or package.startswith(("onnxruntime-", "ort-")):
+            print(f"{package}=={dist.version} at {_get_package_root(package, None)}")
 
     if cuda_version:
         # Print version of installed packages that is related to CUDA or cuDNN DLLs.
-        packages = ["torch",
-                    "nvidia-cuda-runtime-cu12",
-                    "nvidia-cudnn-cu12",
-                    "nvidia-cublas-cu12",
-                    "nvidia-cufft-cu12",
-                    "nvidia-curand-cu12",
-                    "nvidia-cuda-nvrtc-cu12",
-                    "nvidia-nvjitlink-cu12"]
-        print("Python package, version and location:")
+        packages = [
+            "torch",
+            "nvidia-cuda-runtime-cu12",
+            "nvidia-cudnn-cu12",
+            "nvidia-cublas-cu12",
+            "nvidia-cufft-cu12",
+            "nvidia-curand-cu12",
+            "nvidia-cuda-nvrtc-cu12",
+            "nvidia-nvjitlink-cu12",
+        ]
         for package in packages:
             directory_name = "nvidia" if package.startswith("nvidia-") else None
-            print(f"\t{package}=={_get_package_version(package)} at {_get_package_root(package, directory_name)}")
+            version = _get_package_version(package)
+            if version:
+                print(f"{package}=={version} at {_get_package_root(package, directory_name)}")
+            else:
+                print(f"{package} not installed")
 
     if platform.system() == "Windows":
-        print(f"Environment variable: PATH={os.environ['PATH']}")
+        print(f"\nEnvironment variable:\nPATH={os.environ['PATH']}")
     elif platform.system() == "Linux":
-        print(f"Environment variable: LD_LIBRARY_PATH={os.environ['LD_LIBRARY_PATH']}")
+        print(f"\nEnvironment variable:\nLD_LIBRARY_PATH={os.environ['LD_LIBRARY_PATH']}")
 
-    if _get_package_version("psutil"):
+    if importlib.util.find_spec("psutil"):
+
         def is_target_dll(path: str):
-                target_keywords = ["vcruntime140", "msvcp140"]
-                if cuda_version:
-                    target_keywords = ["cufft", "cublas", "cudart", "nvrtc", "curand", "cudnn", *target_keywords]
-                return any(keyword in path for keyword in target_keywords)
+            target_keywords = ["vcruntime140", "msvcp140"]
+            if cuda_version:
+                target_keywords = ["cufft", "cublas", "cudart", "nvrtc", "curand", "cudnn", *target_keywords]
+            return any(keyword in path for keyword in target_keywords)
 
         import psutil
+
         p = psutil.Process(os.getpid())
-        print("List of loaded DLLs:")
+
+        print("\nList of loaded DLLs:")
         for lib in p.memory_maps():
             if is_target_dll(lib.path.lower()):
                 print(lib.path)
+
+        if importlib.util.find_spec("cpuinfo") and importlib.util.find_spec("py3nvml"):
+            from .transformers.machine_info import get_device_info
+
+            print("\nDevice information:")
+            print(get_device_info())
+        else:
+            print("please `pip install py-cpuinfo py3nvml` to show device information.")
     else:
-        print("please `pip install psutil` to list loaded DLLs.")
+        print("please `pip install psutil` to show loaded DLLs.")
+
 
 def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, directory=None):
     """Preload CUDA 12.x and cuDNN 9.x DLLs in Windows or Linux, and MSVC runtime DLLs in Windows.
@@ -220,8 +247,9 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
     """
     import ctypes
     import os
-    import sys
     import platform
+    import sys
+
     if platform.system() not in ["Windows", "Linux"]:
         return
 
@@ -236,10 +264,11 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
             print("Microsoft Visual C++ Redistributable is not installed, this may lead to the DLL load failure.")
             print("It can be downloaded at https://aka.ms/vs/17/release/vc_redist.x64.exe.")
 
-
     if not (cuda_version and cuda_version.startswith("12.")) and (cuda or cudnn):
-        print(f"\033[33mWARNING: {package_name} is not built with CUDA 12.x support. "
-              "Please install a version that supports CUDA 12.x, or call preload_dlls with cuda=False and cudnn=False.\033[0m")
+        print(
+            f"\033[33mWARNING: {package_name} is not built with CUDA 12.x support. "
+            "Please install a version that supports CUDA 12.x, or call preload_dlls with cuda=False and cudnn=False.\033[0m"
+        )
         return
 
     if not (cuda_version and cuda_version.startswith("12.") and (cuda or cudnn)):
@@ -250,11 +279,13 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
     if is_windows:
         torch_version = _get_package_version("torch")
         is_torch_for_cuda_12 = torch_version and "+cu12" in torch_version
-        if 'torch' in sys.modules:
+        if "torch" in sys.modules:
             is_cuda_cudnn_imported_by_torch = is_torch_for_cuda_12
             if (torch_version and "+cu" in torch_version) and not is_torch_for_cuda_12:
-                print(f"\033[33mWARNING: The installed PyTorch {torch_version} does not support CUDA 12.x. "
-                    f"Please install PyTorch for CUDA 12.x to be compatible with {package_name}.\033[0m")
+                print(
+                    f"\033[33mWARNING: The installed PyTorch {torch_version} does not support CUDA 12.x. "
+                    f"Please install PyTorch for CUDA 12.x to be compatible with {package_name}.\033[0m"
+                )
 
         if is_torch_for_cuda_12 and directory is None:
             torch_root = _get_package_root("torch")
@@ -276,7 +307,11 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
     dll_paths = _get_nvidia_dll_paths(is_windows, cuda, cudnn)
     loaded_dlls = []
     for relative_path in dll_paths:
-        dll_path = os.path.join(base_directory, relative_path[-1]) if directory else os.path.join(base_directory, *relative_path)
+        dll_path = (
+            os.path.join(base_directory, relative_path[-1])
+            if directory
+            else os.path.join(base_directory, *relative_path)
+        )
         if os.path.isfile(dll_path):
             try:
                 _ = ctypes.CDLL(dll_path)
