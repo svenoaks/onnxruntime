@@ -130,6 +130,13 @@ jobs:
             /bin/bash /onnxruntime_src/tools/ci_build/github/android/build_aar_and_copy_artifacts.sh $USE_QNN
       workingDirectory: $(Build.SourcesDirectory)
 
+    - task: CopyFiles@2
+      displayName: 'Copy Directory Build Props to: $(Build.ArtifactStagingDirectory)'
+      inputs:
+        SourceFolder: '$(Build.SourcesDirectory)\csharp'
+        Contents: '*.in'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
 
   - ${{ if eq(parameters['enable_code_sign'], 'true') }}:
     - template: jar-maven-signing-linux.yml
