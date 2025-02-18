@@ -133,7 +133,7 @@ jobs:
   - task: CopyFiles@2
     displayName: 'Copy Directory Build Props to: $(Build.ArtifactStagingDirectory)'
     inputs:
-      SourceFolder: '$(Build.SourcesDirectory)\csharp'
+      SourceFolder: '$(Build.SourcesDirectory)/csharp'
       Contents: '*.in'
       TargetFolder: '$(Build.ArtifactStagingDirectory)'
 
