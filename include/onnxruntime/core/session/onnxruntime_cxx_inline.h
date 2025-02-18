@@ -1351,35 +1351,35 @@ inline TensorTypeAndShapeInfo::TensorTypeAndShapeInfo(ONNXTensorElementDataType 
 // static
 inline TypeInfo TypeInfo::CreateTensorInfo(ConstTensorTypeAndShapeInfo tensor_type_and_shape_info) {
   OrtTypeInfo* output = nullptr;
-  ThrowOnError(GetApi().CreateTensorTypeInfo(tensor_type_and_shape_info, &output));
+  ThrowOnError(GetModelBuilderApi().CreateTensorTypeInfo(tensor_type_and_shape_info, &output));
   return TypeInfo{output};
 }
 
 // static
 inline TypeInfo TypeInfo::CreateSparseTensorInfo(ConstTensorTypeAndShapeInfo sparse_tensor_type_and_shape_info) {
   OrtTypeInfo* output = nullptr;
-  ThrowOnError(GetApi().CreateSparseTensorTypeInfo(sparse_tensor_type_and_shape_info, &output));
+  ThrowOnError(GetModelBuilderApi().CreateSparseTensorTypeInfo(sparse_tensor_type_and_shape_info, &output));
   return TypeInfo{output};
 }
 
 // static
 inline TypeInfo TypeInfo::CreateSequenceTypeInfo(ConstTypeInfo sequence_type) {
   OrtTypeInfo* output;
-  ThrowOnError(GetApi().CreateSequenceTypeInfo(sequence_type, &output));
+  ThrowOnError(GetModelBuilderApi().CreateSequenceTypeInfo(sequence_type, &output));
   return TypeInfo{output};
 }
 
 // static
 inline TypeInfo TypeInfo::CreateMapTypeInfo(ONNXTensorElementDataType key_type, ConstTypeInfo value_type) {
   OrtTypeInfo* output;
-  ThrowOnError(GetApi().CreateMapTypeInfo(key_type, value_type, &output));
+  ThrowOnError(GetModelBuilderApi().CreateMapTypeInfo(key_type, value_type, &output));
   return TypeInfo{output};
 }
 
 // static
 inline TypeInfo TypeInfo::CreateOptionalTypeInfo(ConstTypeInfo contained_type) {
   OrtTypeInfo* output;
-  ThrowOnError(GetApi().CreateOptionalTypeInfo(contained_type, &output));
+  ThrowOnError(GetModelBuilderApi().CreateOptionalTypeInfo(contained_type, &output));
   return TypeInfo{output};
 }
 
@@ -2437,14 +2437,14 @@ namespace detail {
 template <>
 inline std::string ValueInfoImpl<OrtValueInfo>::Name() const {
   const char* name = nullptr;
-  ThrowOnError(GetModelBuilderApi().GetValueInfoName(this->p_, &name));
+  ThrowOnError(GetApi().GetValueInfoName(this->p_, &name));
   return name;
 }
 
 template <>
 inline ConstTypeInfo ValueInfoImpl<OrtValueInfo>::TypeInfo() const {
   const OrtTypeInfo* type_info = nullptr;
-  ThrowOnError(GetModelBuilderApi().GetValueInfoTypeInfo(this->p_, &type_info));
+  ThrowOnError(GetApi().GetValueInfoTypeInfo(this->p_, &type_info));
   return ConstTypeInfo{type_info};
 }
 

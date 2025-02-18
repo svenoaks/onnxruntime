@@ -8,6 +8,7 @@
 #include "core/framework/onnxruntime_typeinfo.h"
 #include "core/framework/tensor_type_and_shape.h"
 #include "core/graph/constants.h"
+#include "core/graph/model.h"
 #include "core/graph/model_builder_api_types.h"
 #include "core/graph/onnx_protobuf.h"
 #include "core/session/abi_session_options_impl.h"
@@ -48,27 +49,6 @@ ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateValueInfo, _In_ const char* name, 
   API_IMPL_END
 }
 
-ORT_API_STATUS_IMPL(OrtModelBuilderAPI::GetValueInfoName, _In_ const OrtValueInfo* value_info,
-                    _Out_ const char** name) {
-  API_IMPL_BEGIN
-  *name = value_info->name.c_str();
-  return nullptr;
-  API_IMPL_END
-}
-ORT_API_STATUS_IMPL(OrtModelBuilderAPI::GetValueInfoTypeInfo, _In_ const OrtValueInfo* value_info,
-                    _Outptr_ const OrtTypeInfo** type_info) {
-  API_IMPL_BEGIN
-
-  *type_info = value_info->type_info.get();
-
-  return nullptr;
-  API_IMPL_END
-}
-
-ORT_API(void, OrtModelBuilderAPI::ReleaseValueInfo, _Frees_ptr_opt_ OrtValueInfo* value_info) {
-  delete value_info;
-}
-
 ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateNode, const char* operator_name, const char* domain_name,
                     _In_ const char* node_name,
                     _In_reads_(input_names_len) const char* const* input_names, size_t input_names_len,
@@ -104,10 +84,6 @@ ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateNode, const char* operator_name, c
   *node = n.release();
   return nullptr;
   API_IMPL_END
-}
-
-ORT_API(void, OrtModelBuilderAPI::ReleaseNode, _Frees_ptr_opt_ OrtNode* node) {
-  delete node;
 }
 
 ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateGraph, _Outptr_ OrtGraph** graph) {
@@ -201,10 +177,6 @@ ORT_API_STATUS_IMPL(OrtModelBuilderAPI::AddNodeToGraph, _In_ OrtGraph* graph, _I
   API_IMPL_END
 }
 
-ORT_API(void, OrtModelBuilderAPI::ReleaseGraph, _Frees_ptr_opt_ OrtGraph* graph) {
-  delete graph;
-}
-
 ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateModel,
                     _In_reads_(opset_entries_len) const char* const* domain_names,
                     _In_reads_(opset_entries_len) const int* opset_versions,
@@ -231,10 +203,6 @@ ORT_API_STATUS_IMPL(OrtModelBuilderAPI::AddGraphToModel, _In_ OrtModel* model, _
   model->graph = std::unique_ptr<OrtGraph>(graph);  // take ownership
   return nullptr;
   API_IMPL_END
-}
-
-ORT_API(void, OrtModelBuilderAPI::ReleaseModel, _Frees_ptr_opt_ OrtModel* model) {
-  delete model;
 }
 
 ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateSessionFromModel, _In_ const OrtEnv* env, _In_ const OrtModel* model,
@@ -312,6 +280,20 @@ ORT_API_STATUS_IMPL(OrtModelBuilderAPI::CreateModelBuilderSessionFromArray, _In_
   API_IMPL_END
 }
 
+ORT_API_STATUS_IMPL(OrtModelBuilderAPI::SessionGetOpsetForDomain, _In_ const OrtSession* ort_session,
+                    _In_ const char* domain, _Out_ int* opset) {
+  const auto& session = *reinterpret_cast<const ::onnxruntime::InferenceSession*>(ort_session);
+  const auto& domain_opset_map = session.GetModel().MainGraph().DomainToVersionMap();
+
+  auto it = domain_opset_map.find(domain);
+  if (it == domain_opset_map.cend()) {
+    return OrtApis::CreateStatus(ORT_FAIL, "Domain not used by model.");
+  }
+
+  *opset = it->second;
+  return nullptr;
+}
+
 ORT_API_STATUS_IMPL(OrtModelBuilderAPI::ApplyModelToModelBuilderSession,
                     _In_ OrtSession* session, _In_ OrtModel* model) {
   API_IMPL_BEGIN
@@ -331,32 +313,34 @@ ORT_API_STATUS_IMPL(OrtModelBuilderAPI::FinalizeModelBuilderSession, _In_ OrtSes
   API_IMPL_END
 }
 
-static constexpr OrtModelBuilderApi ort_graph_api = {
+static constexpr OrtModelBuilderApi ort_model_builder_api = {
     // NOTE: The C# bindings depend on the API order within this struct so all additions must be at the end,
     // and no functions can be removed (the implementation needs to change to return an error).
+
+    &OrtModelBuilderAPI::CreateTensorTypeInfo,
+    &OrtModelBuilderAPI::CreateSparseTensorTypeInfo,
+    &OrtModelBuilderAPI::CreateMapTypeInfo,
+    &OrtModelBuilderAPI::CreateSequenceTypeInfo,
+    &OrtModelBuilderAPI::CreateOptionalTypeInfo,
+
     &OrtModelBuilderAPI::CreateValueInfo,
-    &OrtModelBuilderAPI::GetValueInfoName,
-    &OrtModelBuilderAPI::GetValueInfoTypeInfo,
-    &OrtModelBuilderAPI::ReleaseValueInfo,
 
     &OrtModelBuilderAPI::CreateNode,
-    &OrtModelBuilderAPI::ReleaseNode,
 
     &OrtModelBuilderAPI::CreateGraph,
     &OrtModelBuilderAPI::SetGraphInputs,
     &OrtModelBuilderAPI::SetGraphOutputs,
     &OrtModelBuilderAPI::AddInitializerToGraph,
     &OrtModelBuilderAPI::AddNodeToGraph,
-    &OrtModelBuilderAPI::ReleaseGraph,
 
     &OrtModelBuilderAPI::CreateModel,
     &OrtModelBuilderAPI::AddGraphToModel,
-    &OrtModelBuilderAPI::ReleaseModel,
 
     &OrtModelBuilderAPI::CreateSessionFromModel,
 
     &OrtModelBuilderAPI::CreateModelBuilderSession,
     &OrtModelBuilderAPI::CreateModelBuilderSessionFromArray,
+    &OrtModelBuilderAPI::SessionGetOpsetForDomain,
     &OrtModelBuilderAPI::ApplyModelToModelBuilderSession,
     &OrtModelBuilderAPI::FinalizeModelBuilderSession,
 };
@@ -366,6 +350,5 @@ static_assert(offsetof(OrtModelBuilderApi, FinalizeModelBuilderSession) / sizeof
               "Size of version 21 API cannot change");  // initial version in ORT 1.21
 
 ORT_API(const OrtModelBuilderApi*, OrtModelBuilderAPI::GetModelBuilderApi) {
-  // No constraints on the API version yet.
-  return &ort_graph_api;
+  return &ort_model_builder_api;
 }
