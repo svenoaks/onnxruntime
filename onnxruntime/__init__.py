@@ -139,13 +139,17 @@ def _get_nvidia_dll_paths(is_windows:bool, cuda: bool = True, cudnn: bool = True
             ("nvidia", "cufft", "lib", "libcufft.so.11"),
             ("nvidia", "cuda_runtime", "lib", "libcudart.so.12"),
         ]
+
+        # Do not load sub library here. Otherwise import torch after preload_dlls later might encounter issue.
+        # For example, cudnn 9.7 is installed in system and add to LD_LIBRARY_PATH, torch will load libcudnn.so.9.7
+        # even when nvidia-cudnn-cu12==9.1.0.70 is installed with Torch 2.6 for . This will cause torch to fail to load.
         cudnn_dll_paths = [
-            ("nvidia", "cudnn", "lib", "libcudnn_engines_runtime_compiled.so.9"),
-            ("nvidia", "cudnn", "lib", "libcudnn_engines_precompiled.so.9"),
-            ("nvidia", "cudnn", "lib", "libcudnn_heuristic.so.9"),
-            ("nvidia", "cudnn", "lib", "libcudnn_ops.so.9"),
-            ("nvidia", "cudnn", "bin", "libcudnn_adv.so.9"),
-            ("nvidia", "cudnn", "lib", "libcudnn_graph.so.9"),
+            # ("nvidia", "cudnn", "lib", "libcudnn_engines_runtime_compiled.so.9"),
+            # ("nvidia", "cudnn", "lib", "libcudnn_engines_precompiled.so.9"),
+            # ("nvidia", "cudnn", "lib", "libcudnn_heuristic.so.9"),
+            # ("nvidia", "cudnn", "lib", "libcudnn_ops.so.9"),
+            # ("nvidia", "cudnn", "bin", "libcudnn_adv.so.9"),
+            # ("nvidia", "cudnn", "lib", "libcudnn_graph.so.9"),
             ("nvidia", "cudnn", "lib", "libcudnn.so.9"),
         ]
 
@@ -207,26 +211,34 @@ def preload_dlls(cuda: bool = True, cudnn: bool = True, msvc: bool = True, direc
             if dist.metadata['Name'].startswith('onnxruntime'):
                 print(f"\t{dist.metadata['Name']}=={dist.version}")
 
+            print("Environment variables:")
+            if is_windows:
+                print(f"\tPATH={os.environ['PATH']}")
+            else:
+                print(f"\tLD_LIBRARY_PATH={os.environ['LD_LIBRARY_PATH']}")
+
     if not (cuda_version and cuda_version.startswith("12.")) and (cuda or cudnn):
         print(f"\033[33mWARNING: {package_name} is not built with CUDA 12.x support. "
               "Please install a version that support it, or call preload_dlls with cuda=False and cudnn=False.\033[0m")
 
     if cuda_version and cuda_version.startswith("12.") and (cuda or cudnn):
-        torch_version = _get_package_version("torch")
-        is_torch_for_cuda_12 = torch_version and "+cu12" in torch_version
         is_cuda_cudnn_imported_by_torch = False
-        if 'torch' in sys.modules:
-            is_cuda_cudnn_imported_by_torch = is_torch_for_cuda_12
-            if (torch_version and "+cu" in torch_version) and not is_torch_for_cuda_12:
-                print(f"\033[33mWARNING: the installed PyTorch {torch_version} does not support CUDA 12.x. "
-                    f"Please install PyTorch for CUDA 12.x to be compatible with {package_name}.\033[0m")
 
-        if is_windows and is_torch_for_cuda_12 and not directory:
-            torch_root = _get_package_root("torch")
-            if torch_root:
-                directory = os.path.join(torch_root, "lib")
+        if is_windows:
+            torch_version = _get_package_version("torch")
+            is_torch_for_cuda_12 = torch_version and "+cu12" in torch_version
+            if 'torch' in sys.modules:
+                is_cuda_cudnn_imported_by_torch = is_torch_for_cuda_12
+                if (torch_version and "+cu" in torch_version) and not is_torch_for_cuda_12:
+                    print(f"\033[33mWARNING: the installed PyTorch {torch_version} does not support CUDA 12.x. "
+                        f"Please install PyTorch for CUDA 12.x to be compatible with {package_name}.\033[0m")
 
-        base_directory = directory or _get_package_root("nvidia-cuda-runtime-cu12" if cuda else "nvidia-cudnn-cu12", "nvidia") or ".."
+            if is_torch_for_cuda_12 and not directory:
+                torch_root = _get_package_root("torch")
+                if torch_root:
+                    directory = os.path.join(torch_root, "lib")
+
+        base_directory = directory or ".."
         if not os.path.isabs(base_directory):
             base_directory = os.path.join(os.path.dirname(__file__), base_directory)
         base_directory = os.path.normpath(base_directory)
