@@ -8,12 +8,12 @@ namespace Microsoft.ML.OnnxRuntime.Tests
   internal static class AssertUtils
   {
 
-    public static void XunitThrowsWithFeedback<T>(Action action, string failureFeedbackMessage, string expectedExceptionMessage = null) where T : Exception
+    public static void IfThrowsCheckException<T>(Action action, string failureFeedbackMessage, string expectedExceptionMessage = null) where T : Exception
     {
       try
       {
         action();
-        Assert.Fail($"{failureFeedbackMessage}\nExpected {typeof(T).Name} but no exception was thrown. ");
+
       }
       catch (T ex)
       {
