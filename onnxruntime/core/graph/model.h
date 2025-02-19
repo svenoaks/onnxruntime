@@ -280,7 +280,7 @@ class Model {
                              const logging::Logger& logger,
                              const ModelOptions& options = {});
 
-  static common::Status LoadFromModelBuilderApiModel(const OrtModel& graph_api_model,
+  static common::Status LoadFromModelEditorApiModel(const OrtModel& graph_api_model,
                                                      const IOnnxRuntimeOpSchemaRegistryList* local_registries,
                                                      const ModelOptions& options,
                                                      const logging::Logger& logger,

@@ -669,8 +669,8 @@ typedef struct OrtApi OrtApi;
 struct OrtTrainingApi;
 typedef struct OrtTrainingApi OrtTrainingApi;
 
-struct OrtModelBuilderApi;
-typedef struct OrtModelBuilderApi OrtModelBuilderApi;
+struct OrtModelEditorApi;
+typedef struct OrtModelEditorApi OrtModelEditorApi;
 
 /** \brief The helper interface to get the right version of OrtApi
  *
@@ -4835,15 +4835,15 @@ struct OrtApi {
    */
   ORT_API2_STATUS(GetValueInfoTypeInfo, _In_ const OrtValueInfo* value_info, _Outptr_ const OrtTypeInfo** type_info);
 
-  /** \brief Get the Model Builder API instance
+  /** \brief Get the Model Editor API instance
    *
-   * Get the Model Builder API instance to create a new model or augment an existing model.
+   * Get the Model Editor API instance to create a new model or augment an existing model.
    *
-   * \return Model Builder API struct
+   * \return Model Editor API struct
    *
    * \since Version 1.21.
    */
-  const OrtModelBuilderApi*(ORT_API_CALL* GetModelBuilderApi)();
+  const OrtModelEditorApi*(ORT_API_CALL* GetModelEditorApi)();
 
   /** \brief Create an OrtValue for a Tensor that uses pre-existing memory.
    *
@@ -4982,20 +4982,20 @@ struct OrtCustomOp {
 };
 
 /**
- * ORT Model Builder API
+ * ORT Model Editor API
  */
 
 /**
- * \brief The OrtModelBuilderApi struct provides functions to create or augment an ONNX model.
+ * \brief The OrtModelEditorApi struct provides functions to create or edit an ONNX model.
  *
- * See onnxruntime/test/shared_lib/test_model_builder_api.cc for example usage.
+ * See onnxruntime/test/shared_lib/test_model_editor_api.cc for example usage.
  *
  * \since Version 1.21.
  */
-struct OrtModelBuilderApi {
+struct OrtModelEditorApi {
   /** \brief Create an OrtTypeInfo instance for a Tensor.
    *
-   * Create an OrtTypeInfo instance for a Tensor to use as graph inputs/outputs with the Model Builder API.
+   * Create an OrtTypeInfo instance for a Tensor to use as graph inputs/outputs with the Model Editor API.
    *
    * User can release `tensor_info` after creating the OrtTypeInfo.
    *
@@ -5011,7 +5011,7 @@ struct OrtModelBuilderApi {
 
   /** \brief Create an OrtTypeInfo instance for a SparseTensor.
    *
-   * Create an OrtTypeInfo instance for a SparseTensor to use as graph inputs/outputs with the Model Builder API.
+   * Create an OrtTypeInfo instance for a SparseTensor to use as graph inputs/outputs with the Model Editor API.
    *
    * User can release `tensor_info` after creating the OrtTypeInfo.
    *
@@ -5027,7 +5027,7 @@ struct OrtModelBuilderApi {
 
   /** \brief Create an OrtTypeInfo instance for a Map.
    *
-   * Create an OrtTypeInfo instance for a Map to use as graph inputs/outputs with the Model Builder API.
+   * Create an OrtTypeInfo instance for a Map to use as graph inputs/outputs with the Model Editor API.
    *
    * User can release `map_value_type` after creating the OrtTypeInfo.
    *
@@ -5044,7 +5044,7 @@ struct OrtModelBuilderApi {
 
   /** \brief Create an OrtTypeInfo instance for a Sequence.
    *
-   * Create an OrtTypeInfo instance for a Sequence to use as graph inputs/outputs with the Model Builder API.
+   * Create an OrtTypeInfo instance for a Sequence to use as graph inputs/outputs with the Model Editor API.
    *
    * User can release `sequence_type` after creating the OrtTypeInfo.
    *
@@ -5059,7 +5059,7 @@ struct OrtModelBuilderApi {
 
   /** \brief Create an OrtTypeInfo instance for an Optional.
    *
-   * Create an OrtTypeInfo instance for an Optional to use as graph inputs/outputs with the Model Builder API.
+   * Create an OrtTypeInfo instance for an Optional to use as graph inputs/outputs with the Model Editor API.
    *
    * User can release `contained_type` after creating the OrtTypeInfo.
    *
@@ -5274,13 +5274,13 @@ struct OrtModelBuilderApi {
    * by the new nodes. The list of graph inputs/outputs should be for the overall model and not just the new nodes.
    *
    * Add the new information from the OrtModel to the original model using ApplyModelToSession, and prepare the
-   * session for inferencing by calling FinalizeModelBuilderSession.
+   * session for inferencing by calling FinalizeModelEditorSession.
    *
    * \snippet{doc} snippets.dox OrtStatus Return Value
    *
    * \since Version 1.21.
    */
-  ORT_API2_STATUS(CreateModelBuilderSession, _In_ const OrtEnv* env, _In_ const ORTCHAR_T* model_path,
+  ORT_API2_STATUS(CreateModelEditorSession, _In_ const OrtEnv* env, _In_ const ORTCHAR_T* model_path,
                   _In_ const OrtSessionOptions* options,
                   _Outptr_ OrtSession** out);
 
@@ -5296,7 +5296,7 @@ struct OrtModelBuilderApi {
    * by the new nodes. The list of graph inputs/outputs should be for the overall model and not just the new nodes.
    *
    * Add the new information from the OrtModel to the original model using ApplyModelToSession, and prepare the
-   * session for inferencing by calling FinalizeModelBuilderSession.
+   * session for inferencing by calling FinalizeModelEditorSession.
    *
    * \param{in} env The OrtEnv instance.
    * \param{in} model_data The model data for the existing model to augment.
@@ -5307,14 +5307,14 @@ struct OrtModelBuilderApi {
    *
    * \since Version 1.21.
    */
-  ORT_API2_STATUS(CreateModelBuilderSessionFromArray, _In_ const OrtEnv* env,
+  ORT_API2_STATUS(CreateModelEditorSessionFromArray, _In_ const OrtEnv* env,
                   _In_ const void* model_data, size_t model_data_length,
                   _In_ const OrtSessionOptions* options,
                   _Outptr_ OrtSession** out);
 
   /** \brief Query the session for the opset version of a domain.
    *
-   * When using the Model Builder API to augment a model, any new nodes must conform to the opset version of the
+   * When using the Model Editor API to augment a model, any new nodes must conform to the opset version of the
    * original model.
    *
    * \param[in] session OrtSession to query
@@ -5329,9 +5329,9 @@ struct OrtModelBuilderApi {
 
   /** \brief Apply the changes from the model to the session.
    *
-   * Apply the changes from the model to a session that was created using CreateModelBuilderSession[FromArray].
+   * Apply the changes from the model to a session that was created using CreateModelEditorSession[FromArray].
    * All changes will be validated.
-   * Call FinalizeModelBuilderSession to prepare the session for inferencing.
+   * Call FinalizeModelEditorSession to prepare the session for inferencing.
    *
    * Existing input/outputs will only be updated if the OrtGraph inputs/outputs are set in the OrtModel.
    *   i.e. you don't need to call SetGraphInputs/SetGraphOutputs if they are unchanged.
@@ -5342,18 +5342,18 @@ struct OrtModelBuilderApi {
    *
    * \since Version 1.21.
    */
-  ORT_API2_STATUS(ApplyModelToModelBuilderSession, _In_ OrtSession* session, _In_ OrtModel* model);
+  ORT_API2_STATUS(ApplyModelToModelEditorSession, _In_ OrtSession* session, _In_ OrtModel* model);
 
-  /** \brief Finalize the Model Builder session.
+  /** \brief Finalize the Model Editor session.
    *
-   * Finalize the Model Builder session.
+   * Finalize the Model Editor session.
    * This will run optimizers and prepare the session for inferencing.
    *
    * \snippet{doc} snippets.dox OrtStatus Return Value
    *
    * \since Version 1.21.
    */
-  ORT_API2_STATUS(FinalizeModelBuilderSession, _In_ OrtSession* session, _In_ const OrtSessionOptions* options,
+  ORT_API2_STATUS(FinalizeModelEditorSession, _In_ OrtSession* session, _In_ const OrtSessionOptions* options,
                   _Inout_ OrtPrepackedWeightsContainer* prepacked_weights_container);
 };
 

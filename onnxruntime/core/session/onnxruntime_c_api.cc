@@ -28,7 +28,7 @@
 #include "core/framework/utils.h"
 #include "core/graph/constants.h"
 #include "core/graph/graph.h"
-#include "core/graph/model_builder_api_types.h"
+#include "core/graph/model_editor_api_types.h"
 #include "core/providers/get_execution_providers.h"
 #include "core/session/abi_session_options_impl.h"
 #include "core/session/allocator_adapters.h"
@@ -37,7 +37,7 @@
 #include "core/session/inference_session_utils.h"
 #include "core/session/IOBinding.h"
 #include "core/session/lora_adapters.h"
-#include "core/session/model_builder_api.h"
+#include "core/session/model_editor_api.h"
 #include "core/session/onnxruntime_c_api.h"
 #include "core/session/ort_apis.h"
 #include "core/session/ort_env.h"
@@ -2403,11 +2403,11 @@ ORT_API(const OrtTrainingApi*, OrtApis::GetTrainingApi, uint32_t version) {
 #endif
 }
 
-ORT_API(const OrtModelBuilderApi*, OrtApis::GetModelBuilderApi) {
+ORT_API(const OrtModelEditorApi*, OrtApis::GetModelEditorApi) {
 #if !defined(ORT_MINIMAL_BUILD)
-  return OrtModelBuilderAPI::GetModelBuilderApi();
+  return OrtModelEditorAPI::GetModelEditorApi();
 #else
-  fprintf(stderr, "The Model Builder API is not supported in a minimal build.\n");
+  fprintf(stderr, "The Model Editor API is not supported in a minimal build.\n");
   return nullptr;
 #endif
 }
@@ -2807,7 +2807,7 @@ static constexpr OrtApi ort_api_1_to_21 = {
     &OrtApis::GetValueInfoName,
     &OrtApis::GetValueInfoTypeInfo,
 
-    &OrtApis::GetModelBuilderApi,
+    &OrtApis::GetModelEditorApi,
 
     &OrtApis::CreateTensorWithDataAndDeleterAsOrtValue,
 };

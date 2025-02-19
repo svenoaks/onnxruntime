@@ -40,7 +40,7 @@
 #include "core/graph/node_arg.h"
 #include "core/graph/ort_format_load_options.h"
 
-// Type from Model Builder API in ORT C API so can't be in a namespace
+// Type from Model Editor API in ORT C API so can't be in a namespace
 struct OrtGraph;
 
 namespace onnxruntime {
@@ -1438,7 +1438,7 @@ class Graph {  // NOLINT(clang-analyzer-optin.performance.Padding): preserve exi
                                   const OrtFormatLoadOptions& load_options,
                                   const logging::Logger& logger, std::unique_ptr<Graph>& graph);
 
-  static Status LoadFromModelBuilderApiModel(const OrtGraph& api_graph,
+  static Status LoadFromModelEditorApiModel(const OrtGraph& api_graph,
                                              const Model& owning_model,
                                              const std::unordered_map<std::string, int>& domain_to_version,
                                              IOnnxRuntimeOpSchemaCollectionPtr schema_registry,
@@ -1446,7 +1446,7 @@ class Graph {  // NOLINT(clang-analyzer-optin.performance.Padding): preserve exi
                                              const logging::Logger& logger,
                                              std::unique_ptr<Graph>& graph);
 
-  Status UpdateUsingModelBuilderApiModel(const OrtModel& api_model);
+  Status UpdateUsingModelEditorApiModel(const OrtModel& api_model);
 
 #if !defined(ORT_MINIMAL_BUILD) || defined(ORT_EXTENDED_MINIMAL_BUILD)
   const RuntimeOptimizationRecordContainer& RuntimeOptimizations() const {
@@ -1713,7 +1713,7 @@ class Graph {  // NOLINT(clang-analyzer-optin.performance.Padding): preserve exi
     return nodes_[node_index].get();
   }
 
-  Status LoadFromModelBuilderApiModel(const OrtGraph& api_graph, bool updating_existing_graph = false);
+  Status LoadFromModelEditorApiModel(const OrtGraph& api_graph, bool updating_existing_graph = false);
 
   const Model& owning_model_;
 
@@ -1729,7 +1729,7 @@ class Graph {  // NOLINT(clang-analyzer-optin.performance.Padding): preserve exi
 
   InitializedTensorSet name_to_initial_tensor_;
 
-  // Initializers that are external to the Graph. e.g. created using Model Builder API from existing memory.
+  // Initializers that are external to the Graph. e.g. created using Model Editor API from existing memory.
   // As we need to convert to TensorProto for the optimizers to work and keep the deleter information we store them
   // in the Graph instance and retrieve during session state finalization.
   std::unordered_map<std::string, OrtValue> ortvalue_initializers_;

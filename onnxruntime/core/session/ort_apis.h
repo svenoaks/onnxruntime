@@ -541,7 +541,7 @@ ORT_API_STATUS_IMPL(SetEpDynamicOptions, _Inout_ OrtSession* sess, _In_reads_(kv
 ORT_API_STATUS_IMPL(GetValueInfoName, _In_ const OrtValueInfo* value_info, _Out_ const char** name);
 ORT_API_STATUS_IMPL(GetValueInfoTypeInfo, _In_ const OrtValueInfo* value_info, _Outptr_ const OrtTypeInfo** type_info);
 
-ORT_API(const OrtModelBuilderApi*, GetModelBuilderApi);
+ORT_API(const OrtModelEditorApi*, GetModelEditorApi);
 
 ORT_API_STATUS_IMPL(CreateTensorWithDataAndDeleterAsOrtValue, _In_ OrtAllocator* deleter,
                     _In_ void* p_data, size_t p_data_len,

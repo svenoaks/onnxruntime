@@ -1,7 +1,7 @@
-namespace OrtModelBuilderAPI {
+namespace OrtModelEditorAPI {
 
 // implementation that returns the API struct
-ORT_API(const OrtModelBuilderApi*, GetModelBuilderApi);
+ORT_API(const OrtModelEditorApi*, GetModelEditorApi);
 
 // APIs to create/edit type info
 ORT_API_STATUS_IMPL(CreateTensorTypeInfo, _In_ const OrtTensorTypeAndShapeInfo* tensor_info,
@@ -44,12 +44,12 @@ ORT_API_STATUS_IMPL(CreateSessionFromModel, _In_ const OrtEnv* env, _In_ const O
 //
 // Model editing APIs for updating existing model by adding node/s at start or end.
 //
-ORT_API_STATUS_IMPL(CreateModelBuilderSession, _In_ const OrtEnv* env,
+ORT_API_STATUS_IMPL(CreateModelEditorSession, _In_ const OrtEnv* env,
                     _In_ const ORTCHAR_T* model_path,
                     _In_ const OrtSessionOptions* options,
                     _Outptr_ OrtSession** out);
 
-ORT_API_STATUS_IMPL(CreateModelBuilderSessionFromArray, _In_ const OrtEnv* env,
+ORT_API_STATUS_IMPL(CreateModelEditorSessionFromArray, _In_ const OrtEnv* env,
                     _In_ const void* model_data, size_t model_data_length,
                     _In_ const OrtSessionOptions* options,
                     _Outptr_ OrtSession** out);
@@ -57,9 +57,9 @@ ORT_API_STATUS_IMPL(CreateModelBuilderSessionFromArray, _In_ const OrtEnv* env,
 ORT_API_STATUS_IMPL(SessionGetOpsetForDomain, _In_ const OrtSession* session, _In_ const char* domain,
                     _Out_ int* opset);
 
-ORT_API_STATUS_IMPL(ApplyModelToModelBuilderSession, _In_ OrtSession* session, _In_ OrtModel* model);
+ORT_API_STATUS_IMPL(ApplyModelToModelEditorSession, _In_ OrtSession* session, _In_ OrtModel* model);
 
-ORT_API_STATUS_IMPL(FinalizeModelBuilderSession, _In_ OrtSession* session, _In_ const OrtSessionOptions* options,
+ORT_API_STATUS_IMPL(FinalizeModelEditorSession, _In_ OrtSession* session, _In_ const OrtSessionOptions* options,
                     _Inout_ OrtPrepackedWeightsContainer* prepacked_weights_container);
 
-}  // namespace OrtModelBuilderAPI
+}  // namespace OrtModelEditorAPI

@@ -145,14 +145,14 @@ std::string GetBuildInfoString();
 std::vector<std::string> GetAvailableProviders();
 
 /// <summary>
-/// This returns a reference to the ORT C Model Builder API. Used if building or augmenting a model at runtime.
+/// This returns a reference to the ORT C Model Editor API. Used if building or augmenting a model at runtime.
 /// </summary>
-/// <returns>ORT C Model Builder API reference</returns>
-inline const OrtModelBuilderApi& GetModelBuilderApi() {
-  auto* api = GetApi().GetModelBuilderApi();
+/// <returns>ORT C Model Editor API reference</returns>
+inline const OrtModelEditorApi& GetModelEditorApi() {
+  auto* api = GetApi().GetModelEditorApi();
   if (api == nullptr) {
     // minimal build
-    ORT_CXX_API_THROW("Model Builder API is not available in this build", ORT_FAIL);
+    ORT_CXX_API_THROW("Model Editor API is not available in this build", ORT_FAIL);
   }
 
   return *api;
@@ -546,7 +546,7 @@ ORT_DEFINE_RELEASE(Model);
 #undef ORT_DEFINE_RELEASE
 
 #define ORT_DEFINE_MODELBUILDER_API_RELEASE(NAME) \
-  inline void OrtRelease(Ort##NAME* ptr) { GetModelBuilderApi().Release##NAME(ptr); }
+  inline void OrtRelease(Ort##NAME* ptr) { GetModelEditorApi().Release##NAME(ptr); }
 
 #undef ORT_DEFINE_MODELBUILDER_API_RELEASE
 
@@ -665,10 +665,10 @@ struct TypeInfo;
 struct Value;
 struct ModelMetadata;
 
-namespace ModelBuilderAPI {
+namespace ModelEditorAPI {
 struct Model;
 struct ValueInfo;
-}  // namespace ModelBuilderAPI
+}  // namespace ModelEditorAPI
 
 /** \brief unique_ptr typedef used to own strings allocated by OrtAllocators
  *  and release them at the end of the scope. The lifespan of the given allocator
@@ -1122,10 +1122,10 @@ struct ConstSessionImpl : Base<T> {
 
   int GetOpset(const std::string& domain) const;  ///< Wraps OrtApi::SessionGetOpsetForDomain
 
-  // NOTE: We will probably move ValueInfo from ModelBuilderAPI to the ORT API as it will also be relevant to the Plugin EP API.
+  // NOTE: We will probably move ValueInfo from ModelEditorAPI to the ORT API as it will also be relevant to the Plugin EP API.
   // Will move before checkin if that's the case.
-  std::vector<ModelBuilderAPI::ValueInfo> GetInputs() const;
-  std::vector<ModelBuilderAPI::ValueInfo> GetOutputs() const;
+  std::vector<ModelEditorAPI::ValueInfo> GetInputs() const;
+  std::vector<ModelEditorAPI::ValueInfo> GetOutputs() const;
 };
 
 template <typename T>
@@ -1204,7 +1204,7 @@ struct SessionImpl : ConstSessionImpl<T> {
    */
   void SetEpDynamicOptions(const char* const* keys, const char* const* values, size_t kv_len);
 
-  void FinalizeModelBuilderSession(const ModelBuilderAPI::Model& model, const SessionOptions& options,
+  void FinalizeModelEditorSession(const ModelEditorAPI::Model& model, const SessionOptions& options,
                                    OrtPrepackedWeightsContainer* prepacked_weights_container = nullptr);
 };
 
@@ -1234,14 +1234,14 @@ struct Session : detail::SessionImpl<OrtSession> {
   Session(const Env& env, const void* model_data, size_t model_data_length, const SessionOptions& options,
           OrtPrepackedWeightsContainer* prepacked_weights_container);
 
-  /// Wraps OrtModelBuilderApi::CreateSessionFromModel
-  Session(const Env& env, const ModelBuilderAPI::Model& model, const SessionOptions& options);
+  /// Wraps OrtModelEditorApi::CreateSessionFromModel
+  Session(const Env& env, const ModelEditorAPI::Model& model, const SessionOptions& options);
 
-  /// Wraps OrtModelBuilderApi::CreateModelBuilderSession
-  static Session CreateModelBuilderSession(const Env& env, const ORTCHAR_T* model_path, const SessionOptions& options);
+  /// Wraps OrtModelEditorApi::CreateModelEditorSession
+  static Session CreateModelEditorSession(const Env& env, const ORTCHAR_T* model_path, const SessionOptions& options);
 
-  /// Wraps OrtModelBuilderApi::CreateModelBuilderSession
-  static Session CreateModelBuilderSession(const Env& env, const void* model_data, size_t model_data_length,
+  /// Wraps OrtModelEditorApi::CreateModelEditorSession
+  static Session CreateModelEditorSession(const Env& env, const void* model_data, size_t model_data_length,
                                            const SessionOptions& options);
 
   ConstSession GetConst() const { return ConstSession{this->p_}; }
@@ -2558,9 +2558,9 @@ struct CustomOpBase : OrtCustomOp {
 };
 
 //
-// Model Builder API C++ wrappers
+// Model Editor API C++ wrappers
 //
-namespace ModelBuilderAPI {
+namespace ModelEditorAPI {
 
 namespace detail {
 template <typename T>
@@ -2675,7 +2675,7 @@ struct Model : detail::ModelImpl<OrtModel> {
 
   ConstModel GetConst() const { return ConstModel{this->p_}; }
 };
-}  // namespace ModelBuilderAPI
+}  // namespace ModelEditorAPI
 
 }  // namespace Ort
 
