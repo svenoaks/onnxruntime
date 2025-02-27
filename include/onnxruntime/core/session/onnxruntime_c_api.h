@@ -305,6 +305,7 @@ ORT_RUNTIME_CLASS(OpAttr);
 ORT_RUNTIME_CLASS(Logger);
 ORT_RUNTIME_CLASS(ShapeInferContext);
 ORT_RUNTIME_CLASS(LoraAdapter);
+ORT_RUNTIME_CLASS(Model);
 
 #ifdef _WIN32
 typedef _Return_type_success_(return == 0) OrtStatus* OrtStatusPtr;
@@ -4786,6 +4787,21 @@ struct OrtApi {
    */
   ORT_API2_STATUS(SetEpDynamicOptions, _Inout_ OrtSession* sess, _In_reads_(kv_len) const char* const* keys,
                   _In_reads_(kv_len) const char* const* values, _In_ size_t kv_len);
+
+  /** \brief Release an OrtModel.
+   * \snippet{doc} snippets.dox OrtStatus Return Value
+   * \since Version 1.21.
+   */
+  ORT_CLASS_RELEASE(Model);
+
+  ORT_API2_STATUS(LoadModel, _In_ const OrtEnv* env, _In_ const ORTCHAR_T* model_path,
+                  _In_reads_(num_keys) const char* const* config_keys,
+                  _In_reads_(num_keys) const char* const* config_values,
+                  _In_ size_t num_keys, _Outptr_ OrtModel** out);
+  ORT_API2_STATUS(CreateSessionFromModel, _In_ OrtModel* model,
+                  _In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out);
+  ORT_API2_STATUS(CompileModel, _In_ const OrtModel* model, _In_ const OrtSessionOptions* options,
+                  _In_ const ORTCHAR_T* compiled_model_path);
 };
 
 /*

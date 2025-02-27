@@ -1201,6 +1201,59 @@ TEST_F(QnnHTPBackendTests, UseHtpSharedMemoryAllocatorForInputs) {
 }
 #endif  // BUILD_QNN_EP_STATIC_LIB
 
+TEST_F(QnnHTPBackendTests, TestCustomerModel) {
+  const ORTCHAR_T* ort_model_path = L"model.onnx";
+  Ort::Model model(nullptr);
+
+  std::unordered_map<std::string, std::string> load_options = {};
+  Ort::Status status = model.LoadModelFromFile(*ort_env, ort_model_path, load_options);
+  if (!status.IsOK()) {
+    // ERROR loading model.
+    std::abort();
+  }
+
+  Ort::SessionOptions sess_opts;
+  sess_opts.SetGraphOptimizationLevel(ORT_ENABLE_BASIC);
+  sess_opts.SetLogSeverityLevel(ORT_LOGGING_LEVEL_WARNING);
+
+  onnxruntime::ProviderOptions qnn_options;
+  qnn_options["backend_path"] = "QnnHtp.dll";
+  qnn_options["enable_htp_fp16_precision"] = "1";
+
+  sess_opts.AppendExecutionProvider("QNN", qnn_options);
+
+  Ort::Session session(nullptr);
+  status = model.CreateSession(sess_opts, session);
+
+  if (!status.IsOK() && status.GetErrorCode() == ORT_EP_FAIL) { // TODO: More specific compile error
+    const ORTCHAR_T* compiled_model_path = L"model.qnn.onnx";
+
+    // TODO: Create Ort::CompileOptions instead of using Ort::SessionOptions
+    Ort::SessionOptions compile_sess_opts;
+    compile_sess_opts.AppendExecutionProvider("QNN", qnn_options);
+    status = model.CompileModel(compile_sess_opts, compiled_model_path);
+
+    if (!status.IsOK()) {
+      // Failed to compile
+      std::abort();
+    }
+
+    status = model.LoadModelFromFile(*ort_env, compiled_model_path, load_options);
+    if (!status.IsOK()) {
+      // Failed to load compiled model
+      std::abort();
+    }
+
+    status = model.CreateSession(sess_opts, session);
+    if (!status.IsOK()) {
+      // Failed to create session for compiled model
+      std::abort();
+    }
+  }
+
+  // Can call session.Run()
+}
+
 #endif  // defined(__aarch64__) || defined(_M_ARM64) || defined(__linux__)
 #endif  // !defined(ORT_MINIMAL_BUILD)
 

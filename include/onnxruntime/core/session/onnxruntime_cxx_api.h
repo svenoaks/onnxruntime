@@ -2459,6 +2459,39 @@ struct CustomOpBase : OrtCustomOp {
   int end_ver_ = MAX_CUSTOM_OP_END_VER;
 };
 
+namespace detail {
+template <typename T>
+struct ConstModelImpl : Ort::detail::Base<T> {
+  using B = Ort::detail::Base<T>;
+  using B::B;
+
+  Ort::Status CompileModel(const Ort::SessionOptions& options, const ORTCHAR_T* compiled_model_path) const;
+};
+
+template <typename T>
+struct ModelImpl : ConstModelImpl<T> {
+  using B = ConstModelImpl<T>;
+  using B::B;
+
+  Ort::Status LoadModelFromFile(const Ort::Env& env, const ORTCHAR_T* model_path, std::unordered_map<std::string, std::string>& configs);
+  Ort::Status CreateSession(const Ort::SessionOptions& options, Ort::Session& session);
+};
+}  // namespace detail
+
+// Const object holder that does not own the underlying object
+using ConstModel = detail::ConstModelImpl<Ort::detail::Unowned<const OrtModel>>;
+
+/** \brief Wrapper around ::OrtModel
+ *
+ */
+struct Model : detail::ModelImpl<OrtModel> {
+  using DomainOpsetPair = std::pair<std::string, int>;
+
+  explicit Model(std::nullptr_t) {}                        ///< No instance is created
+  explicit Model(OrtModel* p) : ModelImpl<OrtModel>{p} {}  ///< Take ownership of a pointer created by C API
+
+  ConstModel GetConst() const { return ConstModel{this->p_}; }
+};
 }  // namespace Ort
 
 #include "onnxruntime_cxx_inline.h"

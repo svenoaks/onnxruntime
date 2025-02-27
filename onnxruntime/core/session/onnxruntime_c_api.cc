@@ -678,6 +678,12 @@ ORT_API_STATUS_IMPL(OrtApis::EnableOrtCustomOps, _Inout_ OrtSessionOptions* opti
   API_IMPL_END
 }
 
+struct OrtModel {
+  std::unique_ptr<onnxruntime::InferenceSession> session;
+  const ORTCHAR_T* model_path;
+  const OrtEnv* env;
+};
+
 namespace {
 // provider either model_path, or modal_data + model_data_length.
 static ORT_STATUS_PTR CreateSessionAndLoadModel(_In_ const OrtSessionOptions* options,
@@ -768,6 +774,88 @@ static ORT_STATUS_PTR InitializeSession(_In_ const OrtSessionOptions* options,
 }
 
 }  // namespace
+
+ORT_API(void, OrtApis::ReleaseModel, _Frees_ptr_opt_ OrtModel* model) {
+  delete model;
+}
+
+ORT_API_STATUS_IMPL(OrtApis::LoadModel, _In_ const OrtEnv* env, _In_ const ORTCHAR_T* model_path,
+                    _In_reads_(num_keys) const char* const* config_keys,
+                    _In_reads_(num_keys) const char* const* config_values,
+                    _In_ size_t num_keys, _Outptr_ OrtModel** out) {
+  API_IMPL_BEGIN
+  std::unique_ptr<onnxruntime::InferenceSession> sess;
+  OrtStatus* status = nullptr;
+  *out = nullptr;
+
+  OrtSessionOptions ort_sess_opts;
+
+  for (size_t i = 0; i < num_keys; ++i) {
+    ORT_API_RETURN_IF_STATUS_NOT_OK(ort_sess_opts.value.config_options.AddConfigEntry(config_keys[i], config_values[i]));
+  }
+
+  ORT_TRY {
+    ORT_API_RETURN_IF_ERROR(CreateSessionAndLoadModel(&ort_sess_opts, env, model_path, nullptr, 0, sess));
+    auto ort_model = std::make_unique<OrtModel>();
+    ort_model->session = std::move(sess);
+    ort_model->model_path = model_path;
+    ort_model->env = env;
+    *out = ort_model.release();
+  }
+  ORT_CATCH(const std::exception& e) {
+    ORT_HANDLE_EXCEPTION([&]() {
+      status = OrtApis::CreateStatus(ORT_FAIL, e.what());
+    });
+  }
+
+  return status;
+  API_IMPL_END
+}
+
+ORT_API_STATUS_IMPL(CreateSessionFromModel, _In_ OrtModel* model,
+                    _In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out) {
+  API_IMPL_BEGIN
+  OrtStatus* status = nullptr;
+  ORT_TRY {
+    ORT_API_RETURN_IF_ERROR(InitializeSession(options, model->session));
+  }
+  ORT_CATCH(const std::exception& e) {
+    ORT_HANDLE_EXCEPTION([&]() {
+      status = OrtApis::CreateStatus(ORT_FAIL, e.what());
+    });
+  }
+
+  return status;
+  API_IMPL_END
+}
+
+ORT_API_STATUS_IMPL(CompileModel, _In_ const OrtModel* model, _In_ const OrtSessionOptions* options,
+                    _In_ const ORTCHAR_T* compiled_model_path) {
+  API_IMPL_BEGIN
+  std::unique_ptr<onnxruntime::InferenceSession> sess;
+  OrtStatus* status = nullptr;
+  OrtSessionOptions compile_sess_opts = *options;
+  auto path_str = ToPathString(compiled_model_path);
+  ORT_API_RETURN_IF_STATUS_NOT_OK(compile_sess_opts.value.config_options.AddConfigEntry("ep.context_enable", "1"));
+  ORT_API_RETURN_IF_STATUS_NOT_OK(compile_sess_opts.value.config_options.AddConfigEntry("ep.context_file_path", PathToUTF8String(path_str).c_str()));
+  ORT_API_RETURN_IF_STATUS_NOT_OK(compile_sess_opts.value.config_options.AddConfigEntry("session.disable_cpu_ep_fallback", "0"));
+
+  const ORTCHAR_T* model_path = model->model_path;
+  const OrtEnv* env = model->env;
+
+  ORT_TRY {
+    ORT_API_RETURN_IF_ERROR(CreateSessionAndLoadModel(&compile_sess_opts, env, model_path, nullptr, 0, sess));
+    ORT_API_RETURN_IF_ERROR(InitializeSession(&compile_sess_opts, sess));
+  }
+  ORT_CATCH(const std::exception& e) {
+    ORT_HANDLE_EXCEPTION([&]() {
+      status = OrtApis::CreateStatus(ORT_FAIL, e.what());
+    });
+  }
+
+  return status;
+  API_IMPL_END
+}
 
 ORT_API_STATUS_IMPL(OrtApis::CreateSession, _In_ const OrtEnv* env, _In_ const ORTCHAR_T* model_path,
                     _In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out) {
@@ -2812,6 +2900,11 @@ static constexpr OrtApi ort_api_1_to_21 = {
 
     &OrtApis::SetEpDynamicOptions,
     // End of Version 20 - DO NOT MODIFY ABOVE (see above text for more information)
+
+    &OrtApis::ReleaseModel,
+    &OrtApis::LoadModel,
+    &OrtApis::CreateSessionFromModel,
+    &OrtApis::CompileModel,
 };
 
 // OrtApiBase can never change as there is no way to know what version of OrtApiBase is returned by OrtGetApiBase.

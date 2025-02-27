@@ -20,6 +20,7 @@ ORT_API(void, ReleaseCustomOpDomain, _Frees_ptr_opt_ OrtCustomOpDomain*);
 ORT_API(void, ReleaseMapTypeInfo, _Frees_ptr_opt_ OrtMapTypeInfo*);
 ORT_API(void, ReleaseSequenceTypeInfo, _Frees_ptr_opt_ OrtSequenceTypeInfo*);
 ORT_API(void, ReleaseModelMetadata, _Frees_ptr_opt_ OrtModelMetadata*);
+ORT_API(void, ReleaseModel, _Frees_ptr_opt_ OrtModel*);
 
 _Check_return_ _Ret_notnull_ [[nodiscard]] OrtStatus* ORT_API_CALL CreateStatus(OrtErrorCode code, _In_z_ const char* msg)
     NO_EXCEPTION;
@@ -533,4 +534,13 @@ ORT_API_STATUS_IMPL(RunOptionsAddActiveLoraAdapter, _Inout_ OrtRunOptions* optio
 
 ORT_API_STATUS_IMPL(SetEpDynamicOptions, _Inout_ OrtSession* sess, _In_reads_(kv_len) const char* const* keys,
                     _In_reads_(kv_len) const char* const* values, _In_ size_t kv_len);
+
+ORT_API_STATUS_IMPL(LoadModel, _In_ const OrtEnv* env, _In_ const ORTCHAR_T* model_path,
+                    _In_reads_(num_keys) const char* const* config_keys,
+                    _In_reads_(num_keys) const char* const* config_values,
+                    _In_ size_t num_keys, _Outptr_ OrtModel** out);
+ORT_API_STATUS_IMPL(CreateSessionFromModel, _In_ OrtModel* model,
+                    _In_ const OrtSessionOptions* options, _Outptr_ OrtSession** out);
+ORT_API_STATUS_IMPL(CompileModel, _In_ const OrtModel* model, _In_ const OrtSessionOptions* options,
+                    _In_ const ORTCHAR_T* compiled_model_path);
 }  // namespace OrtApis
