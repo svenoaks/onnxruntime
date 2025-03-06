@@ -2,11 +2,11 @@
 # Licensed under the MIT License.
 
 import argparse
-import os
-import sys
-import shutil
-from generate_nuspec_for_native_nuget import generate_metadata
 import glob
+import os
+import shutil
+
+from generate_nuspec_for_native_nuget import generate_metadata
 
 
 def generate_files(lines, args):
@@ -26,9 +26,7 @@ def generate_files(lines, args):
                 continue
             file_name = os.path.basename(file)
 
-            files_list.append(
-                f'<file src="{file}" target="runtimes/{platform}/native/{file_name}" />'
-            )
+            files_list.append(f'<file src="{file}" target="runtimes/{platform}/native/{file_name}" />')
 
         for file in glob.glob(os.path.join(platform_dir, "include", "*")):
             if not os.path.isfile(file):
@@ -37,54 +35,64 @@ def generate_files(lines, args):
             if file_name in processed_includes:
                 continue
             processed_includes.add(file_name)
-            files_list.append(
-                f'<file src="{file}" target="build/native/include/{file_name}" />'
-            )
+            files_list.append(f'<file src="{file}" target="build/native/include/{file_name}" />')
 
     files_list.append(
         f'<file src="{os.path.join(args.root_dir, "tools", "nuget", "nupkg.README.md")}" target="README.md" />'
     )
 
-    files_list.append(
-        f'<file src="{os.path.join(args.root_dir, "LICENSE")}" target="LICENSE" />'
-    )
+    files_list.append(f'<file src="{os.path.join(args.root_dir, "LICENSE")}" target="LICENSE" />')
     files_list.append(
         f'<file src="{os.path.join(args.root_dir, "ThirdPartyNotices.txt")}" target="ThirdPartyNotices.txt" />'
     )
-    files_list.append(
-        f'<file src="{os.path.join(args.root_dir, "docs", "Privacy.md")}" target="Privacy.md" />'
-    )
+    files_list.append(f'<file src="{os.path.join(args.root_dir, "docs", "Privacy.md")}" target="Privacy.md" />')
     files_list.append(
         f'<file src="{os.path.join(args.root_dir, "ORT_icon_for_light_bg.png")}" target="ORT_icon_for_light_bg.png" />'
     )
 
     source_props = os.path.join(
-        args.root_dir, "csharp", "src", "Microsoft.ML.OnnxRuntime", "targets", "netstandard", "props.xml"
+        args.root_dir,
+        "csharp",
+        "src",
+        "Microsoft.ML.OnnxRuntime",
+        "targets",
+        "netstandard",
+        "props.xml",
     )
     target_props = os.path.join(
-        args.root_dir, "csharp", "src", "Microsoft.ML.OnnxRuntime", "targets", "netstandard", f"{args.package_name}.props"
+        args.root_dir,
+        "csharp",
+        "src",
+        "Microsoft.ML.OnnxRuntime",
+        "targets",
+        "netstandard",
+        f"{args.package_name}.props",
     )
     shutil.copyfile(source_props, target_props)
-    files_list.append(
-        f'<file src="{target_props}" target="build/netstandard2.0/" />'
-    )
-    files_list.append(
-        f'<file src="{target_props}" target="build/netstandard2.1/" />'
-    )
+    files_list.append(f'<file src="{target_props}" target="build/netstandard2.0/" />')
+    files_list.append(f'<file src="{target_props}" target="build/netstandard2.1/" />')
 
     source_targets = os.path.join(
-        args.root_dir, "csharp", "src", "Microsoft.ML.OnnxRuntime", "targets", "netstandard", "targets.xml"
+        args.root_dir,
+        "csharp",
+        "src",
+        "Microsoft.ML.OnnxRuntime",
+        "targets",
+        "netstandard",
+        "targets.xml",
     )
     target_targets = os.path.join(
-        args.root_dir, "csharp", "src", "Microsoft.ML.OnnxRuntime", "targets", "netstandard", f"{args.package_name}.targets"
+        args.root_dir,
+        "csharp",
+        "src",
+        "Microsoft.ML.OnnxRuntime",
+        "targets",
+        "netstandard",
+        f"{args.package_name}.targets",
     )
     shutil.copyfile(source_targets, target_targets)
-    files_list.append(
-        f'<file src="{target_targets}" target="build/netstandard2.0/" />'
-    )
-    files_list.append(
-        f'<file src="{target_targets}" target="build/netstandard2.1/" />'
-    )
+    files_list.append(f'<file src="{target_targets}" target="build/netstandard2.0/" />')
+    files_list.append(f'<file src="{target_targets}" target="build/netstandard2.1/" />')
 
     files_list.append("</files>")
     lines.extend(files_list)
@@ -139,4 +147,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
