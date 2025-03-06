@@ -109,6 +109,15 @@ stages:
             Write-Host "##vso[task.setvariable variable=package_version;]$package_version"
           workingDirectory: $(Build.BinariesDirectory)
 
+      - task: PowerShell@2
+        displayName: 'Extract Archives'
+        inputs:
+          targetType: 'inline'
+          script: |
+            Expand-Archive -Path $(Build.BinariesDirectory)/win-x64/onnxruntime-win-x64-cuda.zip -DestinationPath $(Build.BinariesDirectory)/win-x64
+            Expand-Archive -Path $(Build.BinariesDirectory)/win-arm64/onnxruntime-win-ARM64-qnn.zip -DestinationPath $(Build.BinariesDirectory)/win-arm64
+          workingDirectory: $(Build.BinariesDirectory)
+
       - task: PythonScript@0
         displayName: 'Generate Nuget Package'
         inputs:
