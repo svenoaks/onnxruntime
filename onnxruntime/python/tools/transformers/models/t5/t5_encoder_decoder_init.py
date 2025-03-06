@@ -1,4 +1,3 @@
-# -------------------------------------------------------------------------
 # Copyright (c) Microsoft Corporation.  All rights reserved.
 # Licensed under the MIT License.  See License.txt in the project root for
 # license information.
@@ -34,11 +33,13 @@ class T5EncoderDecoderInit(torch.nn.Module):
         lm_head: torch.nn.Module,
         config: T5Config | MT5Config,
         decoder_start_token_id: int | None = None,
+        exclude_decoder_init_except_cross: bool = False,
     ):
         super().__init__()
         self.config = config
         self.t5_encoder = T5Encoder(encoder, config)
         self.t5_decoder_init = T5DecoderInit(decoder, lm_head, config, decoder_start_token_id)
+        self.exclude_decoder_init_except_cross = exclude_decoder_init_except_cross
 
     def forward(
         self,
@@ -47,10 +48,17 @@ class T5EncoderDecoderInit(torch.nn.Module):
         decoder_input_ids: torch.Tensor = None,
     ):
         encoder_hidden_states: torch.FloatTensor = self.t5_encoder(encoder_input_ids, encoder_attention_mask)
-        lm_logits, past_self, past_cross = self.t5_decoder_init(
-            decoder_input_ids, encoder_attention_mask, encoder_hidden_states
-        )
-        return lm_logits, encoder_hidden_states, past_self, past_cross
+        
+        if self.exclude_decoder_init_except_cross:
+            lm_logits, past_self, past_cross = self.t5_decoder_init(
+                decoder_input_ids, encoder_attention_mask, encoder_hidden_states
+            )
+            return encoder_hidden_states, past_cross
+        else:
+            lm_logits, past_self, past_cross = self.t5_decoder_init(
+                decoder_input_ids, encoder_attention_mask, encoder_hidden_states
+            )
+            return lm_logits, encoder_hidden_states, past_self, past_cross
 
 
 class T5EncoderDecoderInitInputs:
@@ -108,8 +116,13 @@ class T5EncoderDecoderInitHelper:
             onnx_model_path (str): onnx path
             verbose (bool, optional): print verbose information. Defaults to True.
             use_external_data_format (bool, optional): use external data format or not. Defaults to False.
+            use_int32_inputs (bool, optional): use int32 instead of int64 for integer inputs. Defaults to False.
         """
         assert isinstance(model, T5EncoderDecoderInit)
+
+        # Do not exclude decoder in torch onnx export so that cross can show up.
+        exclude_decoder_init_except_cross = model.exclude_decoder_init_except_cross
+        model.exclude_decoder_init_except_cross = False
 
         inputs = T5EncoderDecoderInitInputs.create_dummy(
             model.config,
@@ -200,6 +213,9 @@ class T5EncoderDecoderInitHelper:
                 use_external_data_format=use_external_data_format,
                 verbose=verbose,
             )
+            
+            # Restore exclude_decoder_init_except_cross setting.
+            model.exclude_decoder_init_except_cross = exclude_decoder_init_except_cross
 
             # Workaround as mentioned earlier: change numeric dim_param to dim_value
             model = onnx.load(temp_onnx_model_path)
@@ -215,6 +231,43 @@ class T5EncoderDecoderInitHelper:
                         dim_proto.Clear()
                         dim_proto.dim_value = dim_value
 
+            if exclude_decoder_init_except_cross:
+                # Rewrite onnx graph to remove decoder except keep present_[key|value]_cross_* outputs.
+                onnx_model = OnnxModel(model)
+                output_name_to_node = onnx_model.output_name_to_node()
+
+                keep_outputs = ["encoder_hidden_states"]
+                for output in model.graph.output:
+                    if "cross" in output.name:
+                        keep_outputs.append(output.name)
+                        transpose_node = output_name_to_node[output.name]
+                        assert transpose_node.op_type == "Transpose"
+
+                        permutation = OnnxModel.get_node_attribute(transpose_node, "perm")
+                        assert isinstance(permutation, list)
+                        if permutation != [0, 2, 3, 1]:
+                            return
+                        matched_nodes = onnx_model.match_parent_path(transpose_node, ["Reshape", "MatMul"], [0, 0], output_name_to_node)
+                        if matched_nodes is None:
+                            return
+                        
+                        reshape_node, matmul_node = matched_nodes
+                        assert "encoder_hidden_states" in matmul_node.input
+
+                        if not onnx_model.get_initializer("cross_reshape_shape"):
+                            shape_tensor = onnx.helper.make_tensor(
+                                name="cross_reshape_shape",
+                                data_type=onnx.TensorProto.INT64,
+                                dims=[4],
+                                vals=[0, 0, num_heads, head_size],
+                                raw=False,
+                            )
+                            onnx_model.add_initializer(shape_tensor)
+
+                        reshape_node.input[1] = "cross_reshape_shape"
+
+                onnx_model.prune_graph(keep_outputs, allow_remove_graph_inputs=True)
+                
             OnnxModel.save(
                 model,
                 onnx_model_path,
@@ -269,30 +322,45 @@ class T5EncoderDecoderInitHelper:
 
             num_decoder_layers = model.config.num_decoder_layers
 
-            assert torch_outputs[0].cpu().numpy().shape == ort_outputs[0].shape
-            max_diff = numpy.amax(numpy.abs(torch_outputs[0].cpu().numpy() - ort_outputs[0]))
-            logger.debug(f"logits max_diff={max_diff}")
-            max_diff_all = max_diff
+            if not model.exclude_decoder_init_except_cross:
+                assert torch_outputs[0].cpu().numpy().shape == ort_outputs[0].shape
+                max_diff = numpy.amax(numpy.abs(torch_outputs[0].cpu().numpy() - ort_outputs[0]))
+                logger.debug(f"logits max_diff={max_diff}")
+                max_diff_all = max_diff
 
-            assert torch_outputs[1].cpu().numpy().shape == ort_outputs[1].shape
-            max_diff = numpy.amax(numpy.abs(torch_outputs[1].cpu().numpy() - ort_outputs[1]))
-            logger.debug(f"encoder_hidden_states max_diff={max_diff}")
-            max_diff_all = max(max_diff_all, max_diff)
-
-            for i in range(2 * num_decoder_layers):
-                max_diff = numpy.amax(numpy.abs(torch_outputs[2][i].cpu().numpy() - ort_outputs[2 + i]))
-                logger.debug(f"self attention past state {i} max_diff={max_diff}")
-
-            for i in range(2 * num_decoder_layers):
-                max_diff = numpy.amax(
-                    numpy.abs(torch_outputs[3][i].cpu().numpy() - ort_outputs[2 + 2 * num_decoder_layers + i])
-                )
-                logger.debug(f"cross attention past state {i} max_diff={max_diff}")
+                assert torch_outputs[1].cpu().numpy().shape == ort_outputs[1].shape
+                max_diff = numpy.amax(numpy.abs(torch_outputs[1].cpu().numpy() - ort_outputs[1]))
+                logger.debug(f"encoder_hidden_states max_diff={max_diff}")
                 max_diff_all = max(max_diff_all, max_diff)
+
+                for i in range(2 * num_decoder_layers):
+                    max_diff = numpy.amax(numpy.abs(torch_outputs[2][i].cpu().numpy() - ort_outputs[2 + i]))
+                    logger.debug(f"self attention past state {i} max_diff={max_diff}")
+
+                for i in range(2 * num_decoder_layers):
+                    max_diff = numpy.amax(
+                        numpy.abs(torch_outputs[3][i].cpu().numpy() - ort_outputs[2 + 2 * num_decoder_layers + i])
+                    )
+                    logger.debug(f"cross attention past state {i} max_diff={max_diff}")
+                    max_diff_all = max(max_diff_all, max_diff)
+            else:
+                assert torch_outputs[0].cpu().numpy().shape == ort_outputs[0].shape
+                max_diff = numpy.amax(numpy.abs(torch_outputs[0].cpu().numpy() - ort_outputs[0]))
+                logger.debug(f"encoder_hidden_states max_diff={max_diff}")
+                max_diff_all = max(max_diff_all, max_diff)
+
+                for i in range(2 * num_decoder_layers):
+                    max_diff = numpy.amax(
+                        numpy.abs(torch_outputs[1][i].cpu().numpy() - ort_outputs[1 + i])
+                    )
+                    logger.debug(f"cross attention past state {i} max_diff={max_diff}")
+                    max_diff_all = max(max_diff_all, max_diff)
 
             test_cases_max_diff.append(max_diff_all)
             logger.info(
                 f"batch_size={batch_size} encode_sequence_length={encode_sequence_length}, max_diff={max_diff_all}"
             )
 
+
         return max(test_cases_max_diff)
+        

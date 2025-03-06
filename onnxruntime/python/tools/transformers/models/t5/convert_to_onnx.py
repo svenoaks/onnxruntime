@@ -131,6 +131,16 @@ def parse_arguments():
         help="filepath to load pre-trained model with custom state dictionary (e.g. pytorch_model.bin)",
     )
 
+    parser.add_argument(
+        "--exclude_decoder_init_except_cross",
+        required=False,
+        action="store_true",
+        help="Exclude decoder init except cross key or cross value.",
+    )
+    parser.set_defaults(exclude_decoder_init_except_cross=False)
+
+    
+
     args = parser.parse_args()
 
     return args
@@ -152,11 +162,13 @@ def export_onnx_models(
     use_int32_inputs: bool = True,
     model_type: str = "t5",
     state_dict_path: str = "",
+    exclude_decoder_init_except_cross: bool = False,
 ):
     device = torch.device("cuda:0" if use_gpu else "cpu")
 
     models = T5Helper.load_model(
-        model_name_or_path, cache_dir, device, merge_encoder_and_decoder_init, model_type, state_dict_path
+        model_name_or_path, cache_dir, device, merge_encoder_and_decoder_init, model_type, state_dict_path,
+        exclude_decoder_init_except_cross = exclude_decoder_init_except_cross,
     )
     config = models["decoder"].config
 
@@ -269,6 +281,7 @@ def main():
         args.disable_auto_mixed_precision,
         not args.use_int64_inputs,
         args.model_type,
+        exclude_decoder_init_except_cross = args.exclude_decoder_init_except_cross,
     )
 
     logger.info(f"Done! Outputs: {output_paths}")

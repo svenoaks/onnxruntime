@@ -63,6 +63,7 @@ class T5Helper:
         merge_encoder_and_decoder_init: bool = True,
         model_type: str = "t5",
         state_dict_path: str = "",
+        exclude_decoder_init_except_cross: bool = False,
     ) -> dict[str, torch.nn.Module]:
         """Load model given a pretrained name or path, then build models for ONNX conversion.
 
@@ -95,6 +96,7 @@ class T5Helper:
                 model.lm_head,
                 model.config,
                 decoder_start_token_id=None,
+                exclude_decoder_init_except_cross=exclude_decoder_init_except_cross,
             )
             return {"encoder_decoder_init": encoder_decoder_init, "decoder": decoder}
         else:
