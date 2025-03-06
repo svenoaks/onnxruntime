@@ -97,6 +97,24 @@ stages:
           artifactName: 'onnxruntime-win-ARM64-qnn'
           targetPath: '$(Build.BinariesDirectory)/win-arm64'
 
+      - script: |
+          dir
+          Get-ChildItem -Path '$(Build.BinariesDirectory)/managed-nuget' -Recurse
+        workingDirectory: '$(Build.BinariesDirectory)/managed-nuget'
+        displayName: 'List downloaded packages'
+
+      - script: |
+          dir
+          Get-ChildItem -Path '$(Build.BinariesDirectory)/win-x64' -Recurse
+        workingDirectory: '$(Build.BinariesDirectory)/win-x64'
+        displayName: 'List downloaded packages'
+
+      - script: |
+          dir
+          Get-ChildItem -Path '$(Build.BinariesDirectory)/win-arm64' -Recurse
+        workingDirectory: '$(Build.BinariesDirectory)/win-arm64'
+        displayName: 'List downloaded packages'
+
       - task: PowerShell@2
         displayName: 'Bundle NuGet'
         inputs:
