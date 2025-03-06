@@ -109,14 +109,6 @@ def parse_arguments():
     parser.set_defaults(disable_auto_mixed_precision=False)
 
     parser.add_argument(
-        "--separate_encoder_and_decoder_init",
-        required=False,
-        action="store_true",
-        help="Do not merge encode and decoder init. Output 3 instead of 2 onnx models.",
-    )
-    parser.set_defaults(separate_encoder_and_decoder_init=False)
-
-    parser.add_argument(
         "--use_int64_inputs",
         required=False,
         action="store_true",
@@ -132,12 +124,12 @@ def parse_arguments():
     )
 
     parser.add_argument(
-        "--exclude_decoder_init_except_cross",
+        "--encode_decoder_init",
         required=False,
         action="store_true",
-        help="Exclude decoder init except cross key or cross value.",
+        help="Combine encoder and decoder kv cache initialization into one model.",
     )
-    parser.set_defaults(exclude_decoder_init_except_cross=False)
+    parser.set_defaults(encode_decoder_init=False)
 
     
 
@@ -156,19 +148,18 @@ def export_onnx_models(
     precision,
     verbose,
     use_decoder_start_token: bool = False,
-    merge_encoder_and_decoder_init: bool = True,
     overwrite: bool = False,
     disable_auto_mixed_precision: bool = False,
     use_int32_inputs: bool = True,
     model_type: str = "t5",
     state_dict_path: str = "",
-    exclude_decoder_init_except_cross: bool = False,
+    encode_decoder_init: bool = False,
 ):
     device = torch.device("cuda:0" if use_gpu else "cpu")
 
     models = T5Helper.load_model(
-        model_name_or_path, cache_dir, device, merge_encoder_and_decoder_init, model_type, state_dict_path,
-        exclude_decoder_init_except_cross = exclude_decoder_init_except_cross,
+        model_name_or_path, cache_dir, device, model_type, state_dict_path,
+        encode_decoder_init = encode_decoder_init,
     )
     config = models["decoder"].config
 
@@ -276,12 +267,11 @@ def main():
         args.precision,
         args.verbose,
         args.use_decoder_start_token,
-        not args.separate_encoder_and_decoder_init,
         args.overwrite,
         args.disable_auto_mixed_precision,
         not args.use_int64_inputs,
         args.model_type,
-        exclude_decoder_init_except_cross = args.exclude_decoder_init_except_cross,
+        encode_decoder_init = args.encode_decoder_init,
     )
 
     logger.info(f"Done! Outputs: {output_paths}")

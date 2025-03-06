@@ -33,13 +33,13 @@ class T5EncoderDecoderInit(torch.nn.Module):
         lm_head: torch.nn.Module,
         config: T5Config | MT5Config,
         decoder_start_token_id: int | None = None,
-        exclude_decoder_init_except_cross: bool = False,
+        output_cross_only: bool = False,
     ):
         super().__init__()
         self.config = config
         self.t5_encoder = T5Encoder(encoder, config)
         self.t5_decoder_init = T5DecoderInit(decoder, lm_head, config, decoder_start_token_id)
-        self.exclude_decoder_init_except_cross = exclude_decoder_init_except_cross
+        self.output_cross_only = output_cross_only
 
     def forward(
         self,
@@ -49,11 +49,11 @@ class T5EncoderDecoderInit(torch.nn.Module):
     ):
         encoder_hidden_states: torch.FloatTensor = self.t5_encoder(encoder_input_ids, encoder_attention_mask)
         
-        if self.exclude_decoder_init_except_cross:
+        if self.output_cross_only:
             lm_logits, past_self, past_cross = self.t5_decoder_init(
                 decoder_input_ids, encoder_attention_mask, encoder_hidden_states
             )
-            return encoder_hidden_states, past_cross
+            return past_cross
         else:
             lm_logits, past_self, past_cross = self.t5_decoder_init(
                 decoder_input_ids, encoder_attention_mask, encoder_hidden_states
@@ -121,8 +121,8 @@ class T5EncoderDecoderInitHelper:
         assert isinstance(model, T5EncoderDecoderInit)
 
         # Do not exclude decoder in torch onnx export so that cross can show up.
-        exclude_decoder_init_except_cross = model.exclude_decoder_init_except_cross
-        model.exclude_decoder_init_except_cross = False
+        output_cross_only = model.output_cross_only
+        model.output_cross_only = False
 
         inputs = T5EncoderDecoderInitInputs.create_dummy(
             model.config,
@@ -214,8 +214,8 @@ class T5EncoderDecoderInitHelper:
                 verbose=verbose,
             )
             
-            # Restore exclude_decoder_init_except_cross setting.
-            model.exclude_decoder_init_except_cross = exclude_decoder_init_except_cross
+            # Restore output_cross_only setting.
+            model.output_cross_only = output_cross_only
 
             # Workaround as mentioned earlier: change numeric dim_param to dim_value
             model = onnx.load(temp_onnx_model_path)
@@ -231,25 +231,24 @@ class T5EncoderDecoderInitHelper:
                         dim_proto.Clear()
                         dim_proto.dim_value = dim_value
 
-            if exclude_decoder_init_except_cross:
-                # Rewrite onnx graph to remove decoder except keep present_[key|value]_cross_* outputs.
+            if output_cross_only:
+                # Rewrite onnx graph to only keep present_[key|value]_cross_* outputs.
                 onnx_model = OnnxModel(model)
                 output_name_to_node = onnx_model.output_name_to_node()
 
-                keep_outputs = ["encoder_hidden_states"]
                 for output in model.graph.output:
                     if "cross" in output.name:
-                        keep_outputs.append(output.name)
+                        assert output.name in output_name_to_node
+
                         transpose_node = output_name_to_node[output.name]
-                        assert transpose_node.op_type == "Transpose"
+                        assert transpose_node and transpose_node.op_type == "Transpose"
 
                         permutation = OnnxModel.get_node_attribute(transpose_node, "perm")
                         assert isinstance(permutation, list)
-                        if permutation != [0, 2, 3, 1]:
-                            return
+                        assert permutation == [0, 2, 1, 3]
+
                         matched_nodes = onnx_model.match_parent_path(transpose_node, ["Reshape", "MatMul"], [0, 0], output_name_to_node)
-                        if matched_nodes is None:
-                            return
+                        assert matched_nodes is not None
                         
                         reshape_node, matmul_node = matched_nodes
                         assert "encoder_hidden_states" in matmul_node.input
@@ -259,14 +258,15 @@ class T5EncoderDecoderInitHelper:
                                 name="cross_reshape_shape",
                                 data_type=onnx.TensorProto.INT64,
                                 dims=[4],
-                                vals=[0, 0, num_heads, head_size],
+                                vals=[0, 0, int(num_heads), int(head_size)],
                                 raw=False,
                             )
                             onnx_model.add_initializer(shape_tensor)
 
                         reshape_node.input[1] = "cross_reshape_shape"
 
-                onnx_model.prune_graph(keep_outputs, allow_remove_graph_inputs=True)
+                cross_outputs = [output.name for output in model.graph.output if "cross" in output.name]
+                onnx_model.prune_graph(cross_outputs, allow_remove_graph_inputs=True)
                 
             OnnxModel.save(
                 model,
@@ -322,7 +322,7 @@ class T5EncoderDecoderInitHelper:
 
             num_decoder_layers = model.config.num_decoder_layers
 
-            if not model.exclude_decoder_init_except_cross:
+            if not model.output_cross_only:
                 assert torch_outputs[0].cpu().numpy().shape == ort_outputs[0].shape
                 max_diff = numpy.amax(numpy.abs(torch_outputs[0].cpu().numpy() - ort_outputs[0]))
                 logger.debug(f"logits max_diff={max_diff}")
@@ -344,14 +344,10 @@ class T5EncoderDecoderInitHelper:
                     logger.debug(f"cross attention past state {i} max_diff={max_diff}")
                     max_diff_all = max(max_diff_all, max_diff)
             else:
-                assert torch_outputs[0].cpu().numpy().shape == ort_outputs[0].shape
-                max_diff = numpy.amax(numpy.abs(torch_outputs[0].cpu().numpy() - ort_outputs[0]))
-                logger.debug(f"encoder_hidden_states max_diff={max_diff}")
-                max_diff_all = max(max_diff_all, max_diff)
-
+                max_diff_all = -float("inf")
                 for i in range(2 * num_decoder_layers):
                     max_diff = numpy.amax(
-                        numpy.abs(torch_outputs[1][i].cpu().numpy() - ort_outputs[1 + i])
+                        numpy.abs(torch_outputs[i].cpu().numpy() - ort_outputs[i])
                     )
                     logger.debug(f"cross attention past state {i} max_diff={max_diff}")
                     max_diff_all = max(max_diff_all, max_diff)
