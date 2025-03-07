@@ -64,7 +64,7 @@ stages:
       PublishArchive: true
 
   - stage: NugetPackaging
-    dependsOn: [Windows_Packaging_CUDA]
+    dependsOn: [Windows_Packaging_CUDA, OnnxRuntime_QNN_Nuget_Win_Arm64]
     jobs:
     - job: CreateNugetPackage
       pool: 'Onnxruntime-Win2022-GPU-A10'
@@ -79,11 +79,11 @@ stages:
           versionSpec: '3.12'
           addToPath: true
 
-      # - task: DownloadPipelineArtifact@0
-      #   displayName: 'Download Pipeline Artifact - managed nuget'
-      #   inputs:
-      #     artifactName: 'drop-nuget-qnn-arm64'
-      #     targetPath: '$(Build.BinariesDirectory)/managed-nuget'
+      - task: DownloadPipelineArtifact@0
+        displayName: 'Download Pipeline Artifact - managed nuget'
+        inputs:
+          artifactName: 'drop-nuget-qnn-arm64'
+          targetPath: '$(Build.BinariesDirectory)/managed-nuget'
 
       - task: DownloadPipelineArtifact@0
         displayName: 'Download Pipeline Artifact - win-x64'
@@ -91,29 +91,29 @@ stages:
           artifactName: 'onnxruntime-win-x64-cuda'
           targetPath: '$(Build.BinariesDirectory)/win-x64'
 
-      # - task: DownloadPipelineArtifact@0
-      #   displayName: 'Download Pipeline Artifact - win-arm64'
-      #   inputs:
-      #     artifactName: 'onnxruntime-win-ARM64-qnn'
-      #     targetPath: '$(Build.BinariesDirectory)/win-arm64'
+      - task: DownloadPipelineArtifact@0
+        displayName: 'Download Pipeline Artifact - win-arm64'
+        inputs:
+          artifactName: 'onnxruntime-win-ARM64-qnn'
+          targetPath: '$(Build.BinariesDirectory)/win-arm64'
 
-      # - script: |
-      #     dir
-      #   workingDirectory: '$(Build.BinariesDirectory)/managed-nuget'
-      #   displayName: 'List downloaded packages'
+      - script: |
+          dir
+        workingDirectory: '$(Build.BinariesDirectory)/managed-nuget'
+        displayName: 'List downloaded packages'
 
       - script: |
           dir
         workingDirectory: '$(Build.BinariesDirectory)/win-x64'
         displayName: 'List downloaded packages'
 
-      # - script: |
-      #     dir
-      #   workingDirectory: '$(Build.BinariesDirectory)/win-arm64'
-      #   displayName: 'List downloaded packages'
+      - script: |
+          dir
+        workingDirectory: '$(Build.BinariesDirectory)/win-arm64'
+        displayName: 'List downloaded packages'
 
       - task: PowerShell@2
-        displayName: 'Bundle NuGet'
+        displayName: 'Extract Nuget Package Version'
         inputs:
           targetType: 'inline'
           script: |
@@ -129,15 +129,19 @@ stages:
         inputs:
           targetType: 'inline'
           script: |
-            Expand-Archive -Path $(Build.BinariesDirectory)/win-x64/onnxruntime-win-x64-cuda.zip -DestinationPath $(Build.BinariesDirectory)/win-x64
-            Expand-Archive -Path $(Build.BinariesDirectory)/win-arm64/onnxruntime-win-ARM64-qnn.zip -DestinationPath $(Build.BinariesDirectory)/win-arm64
+            Expand-Archive -Path $(Build.BinariesDirectory)/win-x64/onnxruntime-win-x64-cuda*.zip -DestinationPath $(Build.BinariesDirectory)/win-x64
+            Expand-Archive -Path $(Build.BinariesDirectory)/win-arm64/onnxruntime-win-ARM64-qnn*.zip -DestinationPath $(Build.BinariesDirectory)/win-arm64
+            $win_x64 = (Get-ChildItem -Path $(Build.BinariesDirectory)/win-x64 -Filter onnxruntime-win-x64-cuda*)[0].FullName
+            $win_arm64 = (Get-ChildItem -Path $(Build.BinariesDirectory)/win-arm64 -Filter onnxruntime-win-ARM64-qnn*)[0].FullName
+            Write-Host "##vso[task.setvariable variable=win_x64;]$win_x64"
+            Write-Host "##vso[task.setvariable variable=win_arm64;]$win_arm64"
           workingDirectory: $(Build.BinariesDirectory)
 
       - task: PythonScript@0
         displayName: 'Generate Nuget Package'
         inputs:
           scriptPath: '$(Build.SourcesDirectory)/tools/nuget/generate_nuspec_for_custom_nuget.py'
-          arguments: '--nuspec_path "$(Build.BinariesDirectory)/${{ parameters.PackageName }}.nuspec" --root_dir "$(Build.SourcesDirectory)" --commit_id "$(Build.SourceVersion)" --win_arm64 "$(Build.BinariesDirectory)/win-arm64" --win_x64 "$(Build.BinariesDirectory)/win-x64" --package_version "$(package_version)" --package_name "${{ parameters.PackageName }}"'
+          arguments: '--nuspec_path "$(Build.BinariesDirectory)/${{ parameters.PackageName }}.nuspec" --root_dir "$(Build.SourcesDirectory)" --commit_id "$(Build.SourceVersion)" --win_arm64 "$(win_arm64)" --win_x64 "$(win_x64)" --package_version "$(package_version)" --package_name "${{ parameters.PackageName }}"'
 
       - task: NuGetCommand@2
         displayName: 'Pack Nuget Package'
