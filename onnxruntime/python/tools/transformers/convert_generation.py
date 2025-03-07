@@ -2433,8 +2433,7 @@ def convert_generation_model(args: argparse.Namespace, generation_type: Generati
             [
                 onnx.helper.make_attribute("encoder", encoder_model.graph),
                 onnx.helper.make_attribute("decoder", decoder_model.graph),
-                onnx.helper.make_attribute("decoder_start_token_id", config.decoder_start_token_id,
-                ),
+                onnx.helper.make_attribute("decoder_start_token_id", config.decoder_start_token_id),
             ]
         )
     else:

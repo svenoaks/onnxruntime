@@ -51,7 +51,16 @@ class BeamSearchT5 : public BeamSearchBase<T> {
         expand_buffer_int32_func_(expand_buffer_int32_func),
         expand_buffer_float_func_(expand_buffer_float_func),
         expand_buffer_float16_func_(expand_buffer_float16_func),
-        create_beam_scorer_func_(create_beam_scorer_func) {}
+        create_beam_scorer_func_(create_beam_scorer_func) {
+
+          // When decoder use encoder_hidden_state, check it exists in encoder output.
+          if (decoder_subgraph_.UseEncoderHiddenState()) {
+            ORT_ENFORCE(encoder_subgraph_.subgraph_output_names[1] == "encoder_hidden_states");
+          }
+          ORT_ENFORCE(encoder_subgraph_.num_layers == decoder_subgraph_.num_layers);
+          ORT_ENFORCE(encoder_subgraph_.num_heads == decoder_subgraph_.num_heads);
+          ORT_ENFORCE(encoder_subgraph_.head_size == decoder_subgraph_.head_size);
+        }
 
 #ifdef USE_CUDA
   Status InitializeCuda(
@@ -160,7 +169,7 @@ Status BeamSearchT5<T>::Execute(const FeedsFetchesManager& encoder_feeds_fetches
       this->create_encoder_inputs_func_,
       this->add_to_feeds_func_,
       buffer,
-      decoder_input_ids,
+      decoder_input_ids, // new format does not use decoder_input_ids in encoder, it is still initialized here if decoder_start_token_id >= 0.
       this->ort_stream_));
 
 #ifdef DEBUG_NODE_INPUTS_OUTPUTS
@@ -235,7 +244,9 @@ Status BeamSearchT5<T>::Execute(const FeedsFetchesManager& encoder_feeds_fetches
 
   if (current_length + 1 < parameters->max_length) {
     ++iteration_counter;
-    ORT_RETURN_IF_ERROR(this->GenerateNextToken(encoder_fetches[0],
+
+    const OrtValue& logits = encoder_fetches[0];
+    ORT_RETURN_IF_ERROR(this->GenerateNextToken(logits,
                                                 beam_next_tokens,
                                                 beam_state,
                                                 cpu_state,

@@ -16,7 +16,7 @@ class T5EncoderSubgraph : public Subgraph {
       const onnxruntime::Node& node_in,
       const std::string& attribute_name,
       const GraphViewer& subgraph_in) : Subgraph(node_in, attribute_name, subgraph_in) {
-    first_present_output_index_ = 2;
+    first_present_output_index_ = num_subgraph_inputs == 3 ? 2 : 0;
   }
 
   // Create inputs for first inference of subgraph.
@@ -35,10 +35,6 @@ class T5EncoderSubgraph : public Subgraph {
 
   Status Validate(const std::vector<const NodeArg*>& subgraph_inputs,
                   const std::vector<const NodeArg*>& subgraph_outputs) override;
-
-  int GetFirstPresentOutputIndex() const {
-    return first_present_output_index_;
-  }
 
  protected:
   int first_present_output_index_;
