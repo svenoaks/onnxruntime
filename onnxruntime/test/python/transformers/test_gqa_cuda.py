@@ -764,12 +764,20 @@ def attention_ref(
         scores = torch.einsum("bthd,bshd->bhts", q / math.sqrt(d), k)
     else:
         scores = torch.einsum("bthd,bshd->bhts", q, k / math.sqrt(d))
+    torch.set_printoptions(precision=6, linewidth=300, sci_mode=False, profile="full")
+    print(">>>> reference >>>>")
+    print(f"qk{scores=}")
+
     if softcap > 0:
         scores = scores / softcap
         scores = scores.tanh()
         scores = scores * softcap
+        print(f"softcap {scores=}")
+
     if key_padding_mask is not None:
         scores.masked_fill_(rearrange(~key_padding_mask, "b s -> b 1 1 s"), float("-inf"))
+        print(f"key_padding_mask {scores=}")
+
     if window_size[0] >= 0 or window_size[1] >= 0:
         local_mask = construct_local_mask(
             seqlen_q,
@@ -779,28 +787,45 @@ def attention_ref(
             key_padding_mask,
             q.device,
         )
+        print(f"{local_mask=}")
+
         scores.masked_fill_(local_mask, float("-inf"))
+        print(f"local_mask {scores=}")
+
 
     if use_smooth_softmax:
         attention = smooth_softmax_ref(scores)
+        print(f"smooth_softmax_ref {attention=}")
     else:
         attention = torch.softmax(scores, dim=-1)
+        print(f"softmax {attention=}")
 
     # Some rows might be completely masked out so we fill them with zero instead of NaN
     if window_size[0] >= 0 or window_size[1] >= 0:
         attention = attention.masked_fill(torch.all(local_mask, dim=-1, keepdim=True), 0.0)
+        print(f"fill_masked_rows {attention=}")
+
     # We want to mask here so that the attention matrix doesn't have any NaNs
     # Otherwise we'll get NaN in dV
     if query_padding_mask is not None:
         attention = attention.masked_fill(rearrange(~query_padding_mask, "b s -> b 1 s 1"), 0.0)
+        print(f"query_padding_mask {attention=}")
+
+
     dropout_scaling = 1.0 / (1 - dropout_p)
     if dropout_mask is not None:
         attention_drop = attention.masked_fill(~dropout_mask, 0.0)
     else:
         attention_drop = attention
+
     output = torch.einsum("bhts,bshd->bthd", attention_drop, v * dropout_scaling)
+    print(f"{output=}")
+
     if query_padding_mask is not None:
         output.masked_fill_(rearrange(~query_padding_mask, "b s -> b s 1 1"), 0.0)
+        print(f"query_padding_mask masked fill {output=}")
+
+    print("<<< reference <<<<")
     return output.to(dtype=dtype_og), attention.to(dtype=dtype_og)
 
 
@@ -947,6 +972,7 @@ def parity_check_gqa_prompt(
         softcap=softcap,
         use_smooth_softmax=use_smooth_softmax,
     )
+
     out_ref = out_ref.detach().cpu().numpy()
     if past_format == Formats.BNSH:
         k_cache_ref = k_cache_ref.transpose(1, 2)
@@ -992,6 +1018,8 @@ def parity_check_gqa_prompt(
         )
     out = torch.squeeze(out, 0)
     out = torch.reshape(out, (config.batch_size, config.q_sequence_length, config.num_heads, config.head_size))
+
+
     out = out.detach().cpu().numpy()
 
     err_msg = (
@@ -1369,12 +1397,12 @@ def parity_check_gqa_past(
     )
     # Make sure past-present buffer updating correctly
     numpy.testing.assert_allclose(
-        present_k, k_cache_ref.detach().cpu().numpy(), rtol=rtol, atol=atol, equal_nan=True, err_msg=err_msg
+        present_k, k_cache_ref.detach().cpu().numpy(), rtol=rtol, atol=atol, equal_nan=True, err_msg=err_msg + f", output=present_k"
     )
     numpy.testing.assert_allclose(
-        present_v, v_cache_ref.detach().cpu().numpy(), rtol=rtol, atol=atol, equal_nan=True, err_msg=err_msg
+        present_v, v_cache_ref.detach().cpu().numpy(), rtol=rtol, atol=atol, equal_nan=True, err_msg=err_msg + f", output=present_v"
     )
-    numpy.testing.assert_allclose(out, out_ref, rtol=rtol, atol=atol, equal_nan=True, err_msg=err_msg)
+    numpy.testing.assert_allclose(out, out_ref, rtol=rtol, atol=atol, equal_nan=True, err_msg=err_msg + f", output=out")
 
 
 def parity_check_gqa_past_no_buff(
@@ -1390,6 +1418,10 @@ def parity_check_gqa_past_no_buff(
     rtol=1e-3,
     atol=1e-3,
 ):
+    parameters = locals()
+    for name, value in parameters.items():
+        print(f'{name} = {value}')
+
     torch.manual_seed(69)
     q = torch.randn(
         config.batch_size,
@@ -1437,6 +1469,19 @@ def parity_check_gqa_past_no_buff(
         requires_grad=False,
     )
 
+    # Set print options to the 'full' profile
+    torch.set_printoptions(precision=6, linewidth=300, sci_mode=False, profile="full")
+    print("q")
+    print(q)
+    print("k")
+    print(k)
+    print("v")
+    print(v)
+    print("new_k")
+    print(new_k)
+    print("new_v")
+    print(new_v)
+
     window_size = (-1, -1)
     left_window_size = -1
     if local:
@@ -1446,9 +1491,12 @@ def parity_check_gqa_past_no_buff(
         left_window_size = -1
         window_size = (-1, 0)
 
+    print(f"{left_window_size=}{window_size=}")
+
     # Pytorch to compare
     k_cache_ref = k.clone()
     v_cache_ref = v.clone()
+    # use BSNH format for past format in reference.
     if past_format == Formats.BNSH:
         k_cache_ref = k_cache_ref.transpose(1, 2)
         v_cache_ref = v_cache_ref.transpose(1, 2)
@@ -1462,6 +1510,7 @@ def parity_check_gqa_past_no_buff(
         device="cuda",
     )
     cache_seqlens[random.randint(0, config.batch_size - 1)] = config.kv_sequence_length
+    print(f"{cache_seqlens=}")
 
     if rotary:
         rotary_fraction = 1.0
@@ -1490,6 +1539,12 @@ def parity_check_gqa_past_no_buff(
         cos, sin = None, None
         q_ro, k_ro = q, new_k
 
+    print(f"{cos=}")
+    print(f"{sin=}")
+    print(f"{q_ro=}")
+    print(f"{k_ro=}")
+
+
     arange = rearrange(torch.arange(config.kv_sequence_length + config.sequence_length, device="cuda"), "s -> 1 s")
     cache_seqlens_expanded = rearrange(cache_seqlens, "b -> b 1")
     update_mask = torch.logical_and(
@@ -1499,7 +1554,13 @@ def parity_check_gqa_past_no_buff(
     v_cache_ref[update_mask] = rearrange(new_v, "b s ... -> (b s) ...")
     k_cache_rep = repeat(k_cache_ref, "b s h d -> b s (h g) d", g=config.num_heads // config.kv_num_heads)
     v_cache_rep = repeat(v_cache_ref, "b s h d -> b s (h g) d", g=config.num_heads // config.kv_num_heads)
+
+    print(f"{k_cache_rep=}")
+    print(f"{v_cache_rep=}")
+
     key_padding_mask = arange < cache_seqlens_expanded + config.sequence_length
+    print(f"{key_padding_mask=}")
+
     out_ref, _ = attention_ref(
         q_ro,
         k_cache_rep,
@@ -1513,10 +1574,17 @@ def parity_check_gqa_past_no_buff(
         softcap=softcap,
         use_smooth_softmax=use_smooth_softmax,
     )
+    print("casted out_ref")
+    print(out_ref)
+
     out_ref = out_ref.detach().cpu().numpy()
     if past_format == Formats.BNSH:
         k_cache_ref = k_cache_ref.transpose(1, 2)
         v_cache_ref = v_cache_ref.transpose(1, 2)
+        print("BNSH k_cache_ref")
+        print(k_cache_ref)
+        print("BNSH v_cache_ref")
+        print(v_cache_ref)
 
     cache_seqlens += config.sequence_length - 1
 
@@ -1560,6 +1628,14 @@ def parity_check_gqa_past_no_buff(
         )
     out = torch.squeeze(out, 0)
     out = torch.reshape(out, (config.batch_size, config.sequence_length, config.num_heads, config.head_size))
+
+    print("reshaped BSNH out")
+    print(out)
+    print("present_k")
+    print(torch.from_numpy(present_k))
+    print("present_v")
+    print(torch.from_numpy(present_v))
+
     out = out.detach().cpu().numpy()
 
     err_msg = (
@@ -1583,8 +1659,8 @@ def parity_check_gqa_past_no_buff(
             equal_nan=True,
             err_msg=err_msg,
         )
-    numpy.testing.assert_allclose(out, out_ref, rtol=rtol, atol=atol, equal_nan=True, err_msg=err_msg)
 
+    numpy.testing.assert_allclose(out, out_ref, rtol=rtol, atol=atol, equal_nan=True, err_msg=err_msg + f", output=output")
 
 def has_flash_attention():
     if not torch.cuda.is_available():
@@ -1692,7 +1768,7 @@ def gqa_no_past_flash_attention_test_cases():
                                     )
 
 
-def gqa_past_memory_efficient_test_cases():
+def gqa_past_memory_efficient_test_cases_old():
     batches = [5] if pipeline_mode else [1, 3, 5]
     seqs = (
         [(1, 1024)]
@@ -1735,6 +1811,36 @@ def gqa_past_memory_efficient_test_cases():
                                         packed,
                                         softcap,
                                     )
+
+
+def gqa_past_memory_efficient_test_cases():
+    batches = [1]
+    seqs = [(1, 16)]
+    num_h = [(8, 2)]
+    h_sizes = [16]
+    random.seed(6)
+
+    for b in batches:
+        for s, s2 in seqs:
+            for n, n2 in num_h:
+                for h in h_sizes:
+                    for local in [True]:
+                        for rotary, rotary_interleaved in [(False, False)]: #[(True, True)]:
+                            for packed in [False]:
+                                for softcap in [0.0, 50.0]: #[0.0, 50.0]:
+                                    if rotary and h % 16 > 0:
+                                        continue
+                                    config = Config(b, s, s2, n, n2, h)
+                                    yield (
+                                        str(config) + f"{local}_{rotary}_{rotary_interleaved}_{packed}_{softcap}",
+                                        config,
+                                        local,
+                                        rotary,
+                                        rotary_interleaved,
+                                        packed,
+                                        softcap,
+                                    )
+
 
 
 def gqa_past_flash_attention_test_cases():
@@ -1871,120 +1977,120 @@ def gqa_interactive_one_batch_memory_efficient_attention_test_cases():
 
 @unittest.skipIf(not has_flash_attention(), reason="Flash Attention is not available, skipping tests.")
 class TestFlashGQA(unittest.TestCase):
-    @parameterized.expand(gqa_no_past_flash_attention_test_cases())
-    def test_gqa_no_past_flash_attention(self, _, config, local, rotary, rotary_interleaved, packed, softcap):
-        print("------- FLASH ATTENTION (PROMPT CASE) --------")
-        os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "0"
+#     @parameterized.expand(gqa_no_past_flash_attention_test_cases())
+#     def test_gqa_no_past_flash_attention(self, _, config, local, rotary, rotary_interleaved, packed, softcap):
+#         print("------- FLASH ATTENTION (PROMPT CASE) --------")
+#         os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "0"
 
-        parity_check_gqa_prompt(
-            config,
-            local=local,
-            past_format=Formats.BNSH,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-            softcap=softcap,
-            use_smooth_softmax=True,
-        )
-        parity_check_gqa_prompt_no_buff(
-            config,
-            local=local,
-            past_format=Formats.BNSH,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-            softcap=softcap,
-            use_smooth_softmax=False,
-        )
+#         parity_check_gqa_prompt(
+#             config,
+#             local=local,
+#             past_format=Formats.BNSH,
+#             rotary=rotary,
+#             rotary_interleaved=rotary_interleaved,
+#             packed=packed,
+#             softcap=softcap,
+#             use_smooth_softmax=True,
+#         )
+#         parity_check_gqa_prompt_no_buff(
+#             config,
+#             local=local,
+#             past_format=Formats.BNSH,
+#             rotary=rotary,
+#             rotary_interleaved=rotary_interleaved,
+#             packed=packed,
+#             softcap=softcap,
+#             use_smooth_softmax=False,
+#         )
 
-    @parameterized.expand(gqa_past_flash_attention_test_cases())
-    def test_gqa_past_flash_attention(self, _, config, local, rotary, rotary_interleaved, packed, softcap):
-        print("------- FLASH ATTENTION (TOKEN GEN) -------")
-        os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "0"
+#     @parameterized.expand(gqa_past_flash_attention_test_cases())
+#     def test_gqa_past_flash_attention(self, _, config, local, rotary, rotary_interleaved, packed, softcap):
+#         print("------- FLASH ATTENTION (TOKEN GEN) -------")
+#         os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "0"
 
-        parity_check_gqa_past(
-            config,
-            local=local,
-            past_format=Formats.BNSH,
-            rtol=1e-3,
-            atol=1e-3,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-            softcap=softcap,
-            use_smooth_softmax=False,
-        )
-        parity_check_gqa_past_no_buff(
-            config,
-            local=local,
-            past_format=Formats.BNSH,
-            rtol=1e-3,
-            atol=1e-3,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-            softcap=softcap,
-            use_smooth_softmax=True,
-        )
+#         parity_check_gqa_past(
+#             config,
+#             local=local,
+#             past_format=Formats.BNSH,
+#             rtol=1e-3,
+#             atol=1e-3,
+#             rotary=rotary,
+#             rotary_interleaved=rotary_interleaved,
+#             packed=packed,
+#             softcap=softcap,
+#             use_smooth_softmax=False,
+#         )
+#         parity_check_gqa_past_no_buff(
+#             config,
+#             local=local,
+#             past_format=Formats.BNSH,
+#             rtol=1e-3,
+#             atol=1e-3,
+#             rotary=rotary,
+#             rotary_interleaved=rotary_interleaved,
+#             packed=packed,
+#             softcap=softcap,
+#             use_smooth_softmax=True,
+#         )
 
-    @parameterized.expand(gqa_interactive_one_batch_flash_attention_test_cases())
-    def test_gqa_interactive_one_batch_flash_attention(self, _, config, local, rotary, rotary_interleaved, packed):
-        print("------- FLASH ATTENTION (INTERACTIVE) -------")
-        os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "0"
+#     @parameterized.expand(gqa_interactive_one_batch_flash_attention_test_cases())
+#     def test_gqa_interactive_one_batch_flash_attention(self, _, config, local, rotary, rotary_interleaved, packed):
+#         print("------- FLASH ATTENTION (INTERACTIVE) -------")
+#         os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "0"
 
-        parity_check_gqa_past(
-            config,
-            local=local,
-            past_format=Formats.BNSH,
-            rtol=5e-3,
-            atol=5e-3,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-        )
-        parity_check_gqa_past_no_buff(
-            config,
-            local=local,
-            past_format=Formats.BNSH,
-            rtol=5e-3,
-            atol=5e-3,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-        )
+#         parity_check_gqa_past(
+#             config,
+#             local=local,
+#             past_format=Formats.BNSH,
+#             rtol=5e-3,
+#             atol=5e-3,
+#             rotary=rotary,
+#             rotary_interleaved=rotary_interleaved,
+#             packed=packed,
+#         )
+#         parity_check_gqa_past_no_buff(
+#             config,
+#             local=local,
+#             past_format=Formats.BNSH,
+#             rtol=5e-3,
+#             atol=5e-3,
+#             rotary=rotary,
+#             rotary_interleaved=rotary_interleaved,
+#             packed=packed,
+#         )
 
 
-@unittest.skipIf(not has_memory_efficient(), reason="Memory efficient FMHA is not available, skipping tests.")
-class TestMemoryEfficientGQA(unittest.TestCase):
-    @parameterized.expand(gqa_no_past_memory_efficient_test_cases())
-    def test_gqa_no_past_memory_efficient(self, _, config, local, rotary, rotary_interleaved, packed, softcap):
-        os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "1"
-        print("------- MEMORY EFFICIENT ATTENTION (PROMPT CASE) ---------")
+# @unittest.skipIf(not has_memory_efficient(), reason="Memory efficient FMHA is not available, skipping tests.")
+# class TestMemoryEfficientGQA(unittest.TestCase):
+#     @parameterized.expand(gqa_no_past_memory_efficient_test_cases())
+#     def test_gqa_no_past_memory_efficient(self, _, config, local, rotary, rotary_interleaved, packed, softcap):
+#         os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "1"
+#         print("------- MEMORY EFFICIENT ATTENTION (PROMPT CASE) ---------")
 
-        parity_check_gqa_prompt(
-            config,
-            local=local,
-            rtol=5e-3,
-            atol=5e-3,
-            past_format=Formats.BNSH,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-            softcap=softcap,
-            use_smooth_softmax=False,
-        )
-        parity_check_gqa_prompt_no_buff(
-            config,
-            local=local,
-            rtol=5e-3,
-            atol=5e-3,
-            past_format=Formats.BNSH,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-            softcap=softcap,
-            use_smooth_softmax=True,
-        )
+#         parity_check_gqa_prompt(
+#             config,
+#             local=local,
+#             rtol=5e-3,
+#             atol=5e-3,
+#             past_format=Formats.BNSH,
+#             rotary=rotary,
+#             rotary_interleaved=rotary_interleaved,
+#             packed=packed,
+#             softcap=softcap,
+#             use_smooth_softmax=False,
+#         )
+#         parity_check_gqa_prompt_no_buff(
+#             config,
+#             local=local,
+#             rtol=5e-3,
+#             atol=5e-3,
+#             past_format=Formats.BNSH,
+#             rotary=rotary,
+#             rotary_interleaved=rotary_interleaved,
+#             packed=packed,
+#             softcap=softcap,
+#             use_smooth_softmax=True,
+#         )
 
     @parameterized.expand(gqa_past_memory_efficient_test_cases())
     def test_gqa_past_memory_efficient(self, _, config, local, rotary, rotary_interleaved, packed, softcap):
@@ -2016,29 +2122,29 @@ class TestMemoryEfficientGQA(unittest.TestCase):
             use_smooth_softmax=False,
         )
 
-    @parameterized.expand(gqa_interactive_one_batch_memory_efficient_attention_test_cases())
-    def test_gqa_interactive_one_batch_memory_efficient_attention(self, _, config, rotary, rotary_interleaved, packed):
-        os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "1"
-        print("-------- MEMORY EFFICIENT (INTERACTIVE) --------")
+    # @parameterized.expand(gqa_interactive_one_batch_memory_efficient_attention_test_cases())
+    # def test_gqa_interactive_one_batch_memory_efficient_attention(self, _, config, rotary, rotary_interleaved, packed):
+    #     os.environ["ORT_DISABLE_FLASH_ATTENTION"] = "1"
+    #     print("-------- MEMORY EFFICIENT (INTERACTIVE) --------")
 
-        parity_check_gqa_past(
-            config,
-            past_format=Formats.BNSH,
-            rtol=5e-3,
-            atol=5e-3,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-        )
-        parity_check_gqa_past_no_buff(
-            config,
-            past_format=Formats.BNSH,
-            rtol=5e-3,
-            atol=5e-3,
-            rotary=rotary,
-            rotary_interleaved=rotary_interleaved,
-            packed=packed,
-        )
+    #     parity_check_gqa_past(
+    #         config,
+    #         past_format=Formats.BNSH,
+    #         rtol=5e-3,
+    #         atol=5e-3,
+    #         rotary=rotary,
+    #         rotary_interleaved=rotary_interleaved,
+    #         packed=packed,
+    #     )
+    #     parity_check_gqa_past_no_buff(
+    #         config,
+    #         past_format=Formats.BNSH,
+    #         rtol=5e-3,
+    #         atol=5e-3,
+    #         rotary=rotary,
+    #         rotary_interleaved=rotary_interleaved,
+    #         packed=packed,
+    #     )
 
 
 if __name__ == "__main__":

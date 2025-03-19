@@ -652,7 +652,7 @@ struct AttentionKernel {
     XFORMERS_CHECK(
         p.custom_mask_type < NumCustomMaskTypes,
         "invalid value for `custom_mask_type`");
-    if (p.window_size > 0) {
+    if (p.window_size >= 0) {
       XFORMERS_CHECK(
           p.custom_mask_type == CausalFromTopLeft ||
               p.custom_mask_type == CausalFromBottomRight,
@@ -675,6 +675,20 @@ struct AttentionKernel {
     const uint32_t query_start = blockIdx.x * kQueriesPerBlock;
 
     static_assert(kQueriesPerBlock < kNumWarpsPerBlock * kWarpSize, "");
+
+    printf("thread_id %d, blockIdx.x %d, blockIdx.y %d, blockIdx.z %d, "
+          "query_start %d, num_queries %d, num_keys %d kQueriesPerBlock %d kNumWarpsPerBlock %d\n",
+          thread_id(),
+          blockIdx.x,
+          blockIdx.y,
+          blockIdx.z,
+          query_start,
+          p.num_queries,
+          p.num_keys,
+          kQueriesPerBlock,
+          kNumWarpsPerBlock
+        );
+
     if (thread_id() < kQueriesPerBlock) {
       s_prime[thread_id()] = accum_t(0);
       out_rescale[thread_id()] = accum_t(1.0);
@@ -733,10 +747,13 @@ struct AttentionKernel {
     // Iterate through keys
     for (int32_t iter_key_start = 0; iter_key_start < p.num_keys;
          iter_key_start += kKeysPerBlock) {
-      if (p.window_size > 0) {
+
+      if (p.window_size >= 0) {
         // don't compute anything if below attention band
         if (iter_key_start + kKeysPerBlock <
             int32_t(query_start + p.causal_diagonal_offset) - p.window_size) {
+          printf("iter_key_start + kKeysPerBlock < int32_t(query_start + p.causal_diagonal_offset) - p.window_size:"
+                "iter_key_start %d, kKeysPerBlock %d, query_start %d causal_diagonal_offset %d window_size %d num_keys %d\n", iter_key_start, kKeysPerBlock, query_start, p.causal_diagonal_offset, p.window_size, p.num_keys);
           continue;
         }
       }
@@ -747,6 +764,9 @@ struct AttentionKernel {
       int32_t const& problem_size_0_k = p.head_dim;
       int32_t const& problem_size_1_n = p.head_dim_value;
       int32_t const& problem_size_1_k = problem_size_0_n;
+
+      printf("iter_key_start %d, problem_size_0_m %d, problem_size_0_n %d, problem_size_0_k %d problem_size_1_n %d problem_size_1_k %d\n", iter_key_start, problem_size_0_m, problem_size_0_n, problem_size_0_k, problem_size_1_n, problem_size_1_k);
+
 
       auto prologueV = [&](int blockN) {
         typename MM1::Mma::IteratorB iterator_V(
@@ -916,7 +936,7 @@ struct AttentionKernel {
       // query_start + kQueriesPerBlock - window_size mask if x_fist >
       // x_lowerleft
 
-      if (p.window_size > 0 &&
+      if (p.window_size >= 0 &&
           (query_start + p.causal_diagonal_offset +
                cutlass::fast_min(
                    int32_t(kQueriesPerBlock), int32_t(p.num_queries)) -
@@ -1085,7 +1105,7 @@ struct AttentionKernel {
 
         if (!kKeepOutputInRF) {
           int first_key = 0;
-          if (p.window_size > 0) {
+          if (p.window_size >= 0) {
             first_key = (cutlass::fast_max(
                              int(query_start + p.causal_diagonal_offset) -
                                  p.window_size + 1,

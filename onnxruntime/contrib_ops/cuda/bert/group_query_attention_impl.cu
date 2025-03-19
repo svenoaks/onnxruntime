@@ -604,8 +604,30 @@ Status EfficientAttention(
     value = reinterpret_cast<const void*>(data.v);
   }
 
+
   DUMP_TENSOR_INIT();
+
+#if DUMP_TENSOR_LEVEL > 0
+  DUMP_STRING("efficient attention batch_size=", batch_size,
+    ", num_heads=", num_heads,
+    ", head_size=", head_size,
+    ", sequence_length=", sequence_length,
+    ", present_sequence_length=", present_sequence_length,
+    ", scale=", scale,
+    ", softcap=", parameters.softcap,
+    ", is_kv_bsnh=", past_kv_format == AttentionQkvFormat::Q_K_V_BSNH,
+    ", use_smooth_softmax=", parameters.use_smooth_softmax,
+    ", local_window_size=", parameters.local_window_size);
   DUMP_TENSOR("seqlens_k", seqlens_k, batch_size, 1);
+  DUMP_TENSOR("query", reinterpret_cast<const T*>(query), batch_size, sequence_length, num_heads, head_size);
+  if (past_kv_format == AttentionQkvFormat::Q_K_V_BSNH) {
+    DUMP_TENSOR("key", reinterpret_cast<const T*>(key), batch_size, present_sequence_length, num_heads, head_size);
+    DUMP_TENSOR("value", reinterpret_cast<const T*>(value), batch_size, present_sequence_length, num_heads, head_size);
+  } else {
+    DUMP_TENSOR("key", reinterpret_cast<const T*>(key), batch_size, num_heads, present_sequence_length, head_size);
+    DUMP_TENSOR("value", reinterpret_cast<const T*>(value), batch_size, num_heads, present_sequence_length, head_size);
+  }
+#endif
 
   MemoryEfficientAttentionParams p;
   p.sm = device_prop.major * 10 + device_prop.minor;
