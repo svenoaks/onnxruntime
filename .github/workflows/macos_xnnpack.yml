@@ -1,4 +1,4 @@
-name: "macOS CoreML CI Pipeline"
+name: "macOS XNNPACK CI Pipeline"
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
             --parallel \
             --use_vcpkg --use_vcpkg_ms_internal_asset_cache --use_binskim_compliant_compile_flags \
             --build_shared_lib \
-            --use_coreml \
+            --use_xnnpack \
             --build_nodejs \
             --build_objc \
             --build_wheel \
@@ -78,7 +78,7 @@ jobs:
             --parallel \
             --use_vcpkg --use_vcpkg_ms_internal_asset_cache --use_binskim_compliant_compile_flags \
             --build_shared_lib \
-            --use_coreml \
+            --use_xnnpack \
             --build_nodejs \
             --build_objc \
             --build_wheel \

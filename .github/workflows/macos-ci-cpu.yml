@@ -1,0 +1,66 @@
+name: "macOS WebGPU CI Pipeline"
+
+on:
+  push:
+    branches: [fs-eire/mac-ci-pipeline-refactor, "rel-*"]
+  pull_request:
+    branches: [fs-eire/mac-ci-pipeline-refactor]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.runs_on }}
+    env:
+      python_version: "3.11"
+      use_cache: ${{ matrix.platform_machine == 'x86_64' }}
+
+    strategy:
+      matrix:
+        platform_machine: ["x86_64", "arm64"]
+        build_config: ["Debug", "Release"]
+        include:
+          - platform_machine: "x86_64"
+            runs_on: "macos-13"
+            xcode_version: "14.3.1"
+          - platform_machine: "arm64"
+            runs_on: "macos-15"
+            xcode_version: "16"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: macOS CI pipeline prepare steps
+        uses: ./.github/actions/macos-ci-setup
+        with:
+          platform_machine: ${{ matrix.platform_machine }}
+          python_version: ${{ env.python_version }}
+          xcode_version: ${{ matrix.xcode_version }}
+          use_cache: ${{ env.use_cache }}
+
+      - name: Build and Test on macOS
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [[ "${{ env.use_cache }}" == "true" ]]; then
+            VCPKG_FLAGS="--use_vcpkg --use_vcpkg_ms_internal_asset_cache"
+          else
+            VCPKG_FLAGS=""
+          fi
+
+          python ./tools/ci_build/build.py \
+            --build_dir ./build \
+            --skip_submodule_sync \
+            --cmake_generator=Ninja \
+            --parallel \
+            --use_binskim_compliant_compile_flags \
+            --build_shared_lib \
+            --build_nodejs \
+            --build_objc \
+            --build_wheel \
+            --build_java \
+            ${VCPKG_FLAGS} \
+            --config ${{ matrix.build_config }}
