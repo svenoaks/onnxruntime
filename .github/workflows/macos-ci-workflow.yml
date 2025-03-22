@@ -1,0 +1,87 @@
+name: "macOS CI Reusable Workflow"
+description: "This is a reusable workflow for macOS CI pipelines"
+
+on:
+  workflow_call:
+    inputs:
+      use_webgpu:
+        required: false
+        type: boolean
+        default: false
+      use_xnnpack:
+        required: false
+        type: boolean
+        default: false
+      use_coreml:
+        required: false
+        type: boolean
+        default: false
+      python_version:
+        required: false
+        type: string
+        default: "3.11"
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        platform_machine: ["x86_64", "arm64"]
+        build_config: ["Debug", "Release"]
+        include:
+          - platform_machine: "x86_64"
+            runs_on: "macos-13"
+            xcode_version: "14.3.1"
+            use_cache: true
+            build_wheel: true
+          - platform_machine: "arm64"
+            runs_on: "macos-15"
+            xcode_version: "16"
+            use_cache: false # vcpkg not working for arm64 yet
+            build_wheel: false # python tests not passing on arm64 yet
+
+    runs-on: ${{ matrix.runs_on }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: macOS CI pipeline prepare steps
+        uses: ./.github/actions/macos-ci-setup
+        with:
+          platform_machine: ${{ matrix.platform_machine }}
+          python_version: ${{ inputs.python_version }}
+          xcode_version: ${{ matrix.xcode_version }}
+          use_cache: ${{ matrix.use_cache }}
+
+      - name: Build and Test on macOS
+        shell: bash
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [[ "${{ matrix.use_cache }}" == "true" ]]; then
+            VCPKG_FLAGS="--use_vcpkg --use_vcpkg_ms_internal_asset_cache"
+          else
+            VCPKG_FLAGS=""
+          fi
+
+          if [[ "${{ matrix.build_wheel }}" == "true" ]]; then
+            BUILD_WHEEL_FLAG="--build_wheel"
+          else
+            BUILD_WHEEL_FLAG=""
+          fi
+
+          python ./tools/ci_build/build.py \
+            --build_dir ./build \
+            --skip_submodule_sync \
+            --cmake_generator=Ninja \
+            --parallel \
+            --use_binskim_compliant_compile_flags \
+            --build_shared_lib \
+            --build_nodejs \
+            --build_objc \
+            --build_java \
+            ${BUILD_WHEEL_FLAG} \
+            ${{ inputs.use_webgpu && '--use_webgpu' || '' }} \
+            ${{ inputs.use_xnnpack && '--use_xnnpack' || '' }} \
+            ${{ inputs.use_coreml && '--use_coreml' || '' }} \
+            ${VCPKG_FLAGS} \
+            --config ${{ matrix.build_config }}

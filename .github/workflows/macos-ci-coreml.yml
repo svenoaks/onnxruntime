@@ -1,4 +1,4 @@
-name: "macOS WebGPU CI Pipeline"
+name: "macOS CoreML CI Pipeline"
 
 on:
   push:
@@ -14,4 +14,4 @@ jobs:
   call-reusable-workflow:
     uses: ./.github/workflows/macos-ci-workflow.yml
     with:
-      use_webgpu: true
+      use_coreml: true
