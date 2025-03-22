@@ -29,8 +29,14 @@ int ReplaceOrCreateZeroPointInitializer(Graph& graph, Node& quantize_node) {
     zero_point_type = zero_point_tensor_int.data_type();
     zero_point_tensor_float.set_name(graph.GenerateNodeArgName(zero_point_tensor_int.name()));
     zero_point_tensor_float.set_data_type(ONNX_NAMESPACE::TensorProto_DataType_FLOAT);
-    for (const auto val : zero_point_tensor_int.DataAsSpan<int32_t>()) {
-      zero_point_tensor_float.add_float_data(static_cast<float>(val));
+    if (zero_point_type == ONNX_NAMESPACE::TensorProto_DataType_UINT8) {
+      for (const auto val : zero_point_tensor_int.DataAsSpan<uint8_t>()) {
+        zero_point_tensor_float.add_float_data(static_cast<float>(val));
+      }
+    } else {
+      for (const auto val : zero_point_tensor_int.DataAsSpan<int8_t>()) {
+        zero_point_tensor_float.add_float_data(static_cast<float>(val));
+      }
     }
     for (const auto dim : zero_point_tensor_int.dims()) {
       zero_point_tensor_float.add_dims(dim);
