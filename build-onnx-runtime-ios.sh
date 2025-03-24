@@ -7,7 +7,7 @@ fi
 
 ONNX_CONFIG="$1"
 
-./build.sh --config MinSizeRel \
+./build.sh --config Release \
 --use_xcode \
 --ios \
 --apple_sysroot iphoneos \
